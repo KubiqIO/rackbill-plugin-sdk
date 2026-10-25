@@ -1,0 +1,58 @@
+syntax = "proto3";
+package rackbill.plugin.v1;
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+// Optional cross-kind service, dispense key "storage". The host creates the
+// schema before connecting its reverse StorageData service through GRPCBroker.
+service StorageManifest {
+  rpc DescribeStorage(StorageDescribeRequest) returns (StorageDescribeResponse);
+  rpc ConnectStorage(StorageConnectRequest) returns (StorageEmpty);
+}
+message StorageDescribeRequest {}
+message StorageDescribeResponse {
+  int64 version = 1;
+  repeated StorageTable tables = 2;
+}
+message StorageTable {
+  string name = 1;
+  repeated StorageColumn columns = 2;
+}
+message StorageColumn {
+  string name = 1;
+  // Closed vocabulary: text, integer (signed int64), boolean, json.
+  string type = 2;
+  bool required = 3;
+}
+message StorageConnectRequest { uint32 broker_id = 1; }
+message StorageEmpty {}
+
+// Host-owned reverse service. Its namespace is bound to the connection by the
+// host; requests cannot supply a plugin identity, schema, database or SQL.
+service StorageData {
+  rpc Put(StoragePutRequest) returns (StorageEmpty);
+  rpc Get(StorageKeyRequest) returns (StorageGetResponse);
+  rpc Delete(StorageKeyRequest) returns (StorageEmpty);
+  rpc List(StorageListRequest) returns (StorageListResponse);
+}
+message StorageKeyRequest {
+  string tenant_id = 1;
+  string table = 2;
+  string key = 3;
+}
+message StoragePutRequest {
+  string tenant_id = 1;
+  string table = 2;
+  string key = 3;
+  // UTF-8 JSON object containing the declared columns, at most 64 KiB.
+  bytes values = 4;
+}
+message StorageGetResponse { bytes values = 1; }
+message StorageListRequest {
+  string tenant_id = 1;
+  string table = 2;
+  string after = 3;
+  // 1..25, default 25. Lexical keyset pagination, exclusive of "after".
+  int32 limit = 4;
+}
+message StorageRecord { string key = 1; bytes values = 2; }
+message StorageListResponse { repeated StorageRecord records = 1; }

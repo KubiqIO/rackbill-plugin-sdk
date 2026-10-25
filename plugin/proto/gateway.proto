@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+import "plugin/proto/provisioner.proto";
+
+// PaymentGateway is implemented by out-of-process payment plugins (Stripe,
+// PayPal, ...) speaking gRPC via hashicorp/go-plugin.
+service PaymentGateway {
+  rpc Describe(DescribeRequest) returns (DescribeResponse);
+  rpc Charge(ChargeRequest) returns (ChargeResponse);
+  rpc Refund(RefundRequest) returns (RefundResponse);
+  // CheckCharge resolves a charge that returned "pending" (hosted-checkout
+  // flows). The agent polls it until the charge succeeds, declines, or
+  // expires.
+  rpc CheckCharge(CheckChargeRequest) returns (CheckChargeResponse);
+  // Optional: older plugins return UNIMPLEMENTED. Advertised in Describe.
+  rpc CheckRefund(CheckRefundRequest) returns (RefundResponse);
+}
+
+message DescribeRequest {}
+
+message DescribeResponse {
+  string name = 1;                // machine name, e.g. "stripe"
+  string display_name = 2;
+  string version = 3;
+  repeated string currencies = 4; // empty = all currencies supported
+  bool supports_refunds = 5;
+  // Tenant-level settings (API keys, checkout URLs) rendered by the admin
+  // panel and delivered on every call via `config`. A plugin that declares
+  // none is configured instance-wide by environment variables, as before.
+  repeated ConfigField config_fields = 6;
+  // Maturity level: "dev" (contract simulator), "alpha", "beta", "stable".
+  // Empty or unrecognized is treated as alpha; a `<kind>-dev` binary is
+  // tagged dev by the host whatever it declares. Shown wherever the plugin
+  // is offered (Admin → Plugins, gateway and provider pickers).
+  string maturity = 7;
+  // Guaranteed retention of charge and refund idempotency keys. Zero means
+  // the agent must not repeat a call whose outcome is unknown.
+  int64 idempotency_window_seconds = 8;
+  bool supports_refund_checks = 9;
+  int32 currency_units_version = 10; // 1 = sdk/money units, including provider exceptions
+  bool supports_recurring_payments = 11; // hosted vault opt-in and off-session payments
+  string recurring_payments_config_key = 12; // optional tenant checkbox prerequisite
+}
+
+message ChargeRequest {
+  string tenant_id = 1;
+  string account_id = 2;
+  string invoice_id = 3;          // empty for credit top-ups
+  int64 amount_cents = 4;
+  string currency = 5;
+  map<string, string> metadata = 6;
+  // Tenant-scoped gateway settings (the config_fields values). Empty when the
+  // tenant has none — the plugin falls back to its environment.
+  map<string, string> config = 7;
+  bool save_payment_method = 8; // explicit customer consent, hosted checkout only
+  string payment_token = 9; // SECRET provider vault reference; never log or expose
+}
+
+message ChargeResponse {
+  string status = 1;              // "succeeded", "declined", "pending"
+  string transaction_id = 2;
+  string failure_reason = 3;
+  string redirect_url = 4;        // hosted-checkout gateways
+  // Non-empty = the checkout handoff is a form POST: the panel submits these
+  // as hidden form fields to redirect_url instead of navigating to it.
+  // For processors whose hosted page takes a POSTed token (Authorize.net).
+  map<string, string> redirect_params = 5;
+}
+
+message RefundRequest {
+  string transaction_id = 1;
+  int64 amount_cents = 2;
+  string currency = 3;
+  map<string, string> config = 4; // same semantics as ChargeRequest.config
+  string idempotency_key = 5;
+}
+
+message CheckRefundRequest {
+  string refund_id = 1;
+  map<string, string> config = 2;
+}
+
+message CheckChargeRequest {
+  string transaction_id = 1;
+  map<string, string> config = 2; // same semantics as ChargeRequest.config
+  int64 expected_amount_cents = 3; // RackBill currency minor units
+  string expected_currency = 4;
+  bool retrieve_payment_method = 5; // only for durably recorded opt-in
+}
+
+message CheckChargeResponse {
+  string status = 1;              // "succeeded", "declined", "pending"
+  string transaction_id = 2;      // non-empty = replace the stored id (e.g. session → payment intent)
+  string failure_reason = 3;
+  int64 amount_cents = 4; // verified captured amount in RackBill currency minor units
+  string currency = 5; // nonempty only when amount was observed at the provider
+  string payment_token = 6; // SECRET, only after verified payment and vaulting
+}
+
+message RefundResponse {
+  string status = 1;              // "succeeded", "failed", "pending", "requires_action"
+  string refund_id = 2;
+  string failure_reason = 3;
+}

@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+// Bundle is the manifest a plugin binary serves alongside its kind services
+// when it serves more than one kind (plugin architecture §3, decision 118):
+// one process — a provisioner and the usage source that meters what it
+// provisions, say — registered under every kind it implements. It is a
+// cross-kind facility like WidgetProvider, not a kind: it rides its own
+// go-plugin dispense key, "bundle", and the host probes it once at load.
+//
+// The binary's name still names its primary kind, and that kind's Describe
+// is what the host calls first; DescribeBundle lists every kind the process
+// serves, primary included, and the host dispenses and registers each of
+// the others in turn. A binary that does not serve the manifest — one built
+// before it existed, or a hand-written implementation in another language
+// — is a single-kind plugin exactly as before: UNIMPLEMENTED is "no bundle".
+service Bundle {
+  rpc DescribeBundle(DescribeBundleRequest) returns (DescribeBundleResponse);
+}
+
+message DescribeBundleRequest {}
+
+message DescribeBundleResponse {
+  // Dispense keys this process serves, e.g. ["provisioner", "usage"] — the
+  // §3 table's keys, which are also the kind names. Every listed kind must
+  // answer its Describe; a kind the host does not know is skipped with a
+  // warning rather than failing the load, so a newer SDK stays loadable by
+  // an older agent for the kinds it does know.
+  repeated string kinds = 1;
+}

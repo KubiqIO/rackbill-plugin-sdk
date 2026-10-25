@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+import "plugin/proto/provisioner.proto";
+
+// Accounting is implemented by out-of-process bookkeeping plugins
+// (QuickBooks, Xero, ...). The agent mirrors its billing records — customers,
+// invoices, payments, refunds — into the external system; the mirror is
+// one-way and nothing in billing ever reads back from it. The agent owns
+// what to export and when (an event-fed outbox), resolves dependency order
+// (customer before invoice before payment/refund), and stores the external
+// refs; the plugin owns authentication and mapping onto the remote entities.
+service Accounting {
+  rpc DescribeAccounting(DescribeAccountingRequest) returns (DescribeAccountingResponse);
+  rpc TestAccountingConnection(TestAccountingConnectionRequest) returns (TestAccountingConnectionResponse);
+  rpc SyncCustomer(SyncCustomerRequest) returns (AccountingSyncResponse);
+  rpc SyncInvoice(SyncInvoiceRequest) returns (AccountingSyncResponse);
+  rpc SyncPayment(SyncPaymentRequest) returns (AccountingSyncResponse);
+  rpc SyncRefund(SyncRefundRequest) returns (AccountingSyncResponse);
+  // ListConfigOptions enumerates a dynamic_options field's values with the
+  // company's stored connection config (contract 15): an income account for a
+  // product-scoped field. Optional; Unimplemented when the plugin has none.
+  // Reuses the provisioner messages, as the notifier contract does.
+  rpc ListConfigOptions(ListConfigOptionsRequest) returns (ListConfigOptionsResponse);
+}
+
+message DescribeAccountingRequest {}
+
+message DescribeAccountingResponse {
+  string name = 1;                        // machine name, e.g. "quickbooks"
+  string display_name = 2;
+  string version = 3;
+  // Whether the backend can represent money returned to a customer
+  // (refund receipts / credit notes). Without it refund jobs are skipped.
+  bool supports_refunds = 4;
+  // Connection settings (company id, OAuth credentials, ...). Since contract
+  // 14 a field with scope "product" is mapped per product instead (an income
+  // account), never secret, and reaches the plugin as an invoice line's config.
+  repeated ConfigField config_fields = 5;
+  string maturity = 6;                    // "dev" | "alpha" | "beta" | "stable"; empty = alpha (see gateway.proto)
+  bool supports_fractional_tax_rates = 7; // exact rate_units, advertised by the updated SDK
+}
+
+// TestAccountingConnection validates a tenant's config interactively from
+// the admin panel (10s budget). detail carries the connected company name on
+// ok, the provider's reason on failed.
+message TestAccountingConnectionRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+}
+
+message TestAccountingConnectionResponse {
+  string status = 1;                     // "ok", "failed"
+  string detail = 2;
+  // Rotated credentials to persist — see AccountingSyncResponse.
+  map<string, string> config_updates = 3;
+}
+
+// AccountingSyncResponse answers every Sync* call. A non-empty external_ref
+// REPLACES the stored ref for the record (the CheckCharge transaction-id
+// pattern), turning later syncs into updates. config_updates carries values
+// the host must merge into the stored tenant config before the next call —
+// the state channel for rotating OAuth refresh tokens; plugins themselves
+// stay stateless.
+message AccountingSyncResponse {
+  string status = 1;                     // "synced", "failed"
+  string external_ref = 2;               // remote entity id
+  string failure_reason = 3;
+  map<string, string> config_updates = 4;
+}
+
+// AccountingCustomer is a billing account as the ledger sees it. id is the
+// stable RackBill account id — part of the natural key plugins adopt by.
+message AccountingCustomer {
+  string id = 1;
+  string name = 2;
+  string email = 3;                      // primary contact, may be empty
+  string currency = 4;
+  string country = 5;
+  string region = 6;
+}
+
+message SyncCustomerRequest {
+  string tenant_id = 1;
+  AccountingCustomer customer = 2;
+  string external_ref = 3;               // from a prior sync; empty on first
+  map<string, string> config = 4;
+}
+
+message AccountingInvoiceLine {
+  string description = 1;
+  int64 quantity = 2;
+  int64 unit_cents = 3;
+  int64 amount_cents = 4;
+  string kind = 5;                       // "one_time", "recurring", "usage", ...
+  // The line's product mapping for this provider (contract 15): the values of
+  // the plugin's product-scoped fields, snapshotted when the line was billed.
+  // Empty means the connection default.
+  map<string, string> config = 6;
+}
+
+message AccountingInvoiceTax {
+  string name = 1;
+  int32 rate_bps = 2;
+  int64 amount_cents = 3;
+  int64 rate_units = 4; // millionths of a percent; 9.725% = 9725000. Prefer over legacy rate_bps.
+}
+
+message SyncInvoiceRequest {
+  string tenant_id = 1;
+  string invoice_id = 2;
+  string number = 3;                     // the natural key to adopt by
+  string status = 4;                     // "open", "paid", "cancelled", "refunded"
+  string currency = 5;
+  int64 subtotal_cents = 6;
+  int64 tax_cents = 7;
+  int64 total_cents = 8;
+  int64 issued_at_unix = 9;
+  int64 due_at_unix = 10;                // 0 = none
+  repeated AccountingInvoiceLine lines = 11;
+  repeated AccountingInvoiceTax taxes = 12;
+  string customer_ref = 13;              // external ref of the already-synced customer
+  string external_ref = 14;
+  map<string, string> config = 15;
+}
+
+message SyncPaymentRequest {
+  string tenant_id = 1;
+  string payment_id = 2;
+  string invoice_ref = 3;                // external ref of the synced invoice; empty for credit top-ups
+  string customer_ref = 4;
+  int64 amount_cents = 5;
+  string currency = 6;
+  string gateway = 7;
+  string transaction_id = 8;
+  int64 paid_at_unix = 9;
+  string external_ref = 10;
+  map<string, string> config = 11;
+}
+
+// AccountingRefundLine is one part of a refund booked against one product
+// mapping (contract 15). The agent allocates; the plugin books.
+message AccountingRefundLine {
+  int64 amount_cents = 1;                // gross, tax included
+  map<string, string> config = 2;        // as AccountingInvoiceLine.config
+}
+
+message SyncRefundRequest {
+  string tenant_id = 1;
+  string refund_id = 2;                  // stable per refund action — the natural key to adopt by
+  string payment_ref = 3;                // external ref of the synced payment
+  string customer_ref = 4;
+  int64 amount_cents = 5;
+  string currency = 6;
+  int64 refunded_at_unix = 7;
+  string external_ref = 8;
+  map<string, string> config = 9;
+  // How the refund splits across product mappings; amounts sum to
+  // amount_cents. Empty means the connection default, as before contract 15.
+  repeated AccountingRefundLine lines = 10;
+}

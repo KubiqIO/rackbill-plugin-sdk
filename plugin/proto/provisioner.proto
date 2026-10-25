@@ -1,0 +1,1121 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+// Provisioner is implemented by out-of-process provisioning plugins
+// (VMs, cPanel, Pterodactyl, ...) speaking gRPC via hashicorp/go-plugin.
+// The agent queues provisioning jobs and calls these RPCs as services move
+// through their lifecycle.
+service Provisioner {
+  rpc DescribeProvisioner(DescribeProvisionerRequest) returns (DescribeProvisionerResponse);
+  rpc Provision(ProvisionRequest) returns (ProvisionResponse);
+  rpc SuspendService(ServiceActionRequest) returns (ServiceActionResponse);
+  rpc UnsuspendService(ServiceActionRequest) returns (ServiceActionResponse);
+  rpc TerminateService(ServiceActionRequest) returns (ServiceActionResponse);
+
+  // Renewal capability (additive, gated by supports_renew): the service's
+  // paid period moved, and the remote object carries its own paid-through
+  // date that has to move with it (a licence expiry, a seat term). Enqueued
+  // when a renewal invoice is paid; provisioners that do not declare the flag
+  // are never told, because for a machine or a hosting account a renewal
+  // changes nothing the remote system needs to hear.
+  rpc RenewService(RenewServiceRequest) returns (ServiceActionResponse);
+
+  // VM capability (additive, gated by supports_vm / supports_console in
+  // DescribeProvisionerResponse). Hosts must not call these unless the
+  // matching flag is set; plugins without the capability return UNIMPLEMENTED.
+  rpc GetVMState(VMRequest) returns (VMStateResponse);
+  rpc VMPowerAction(VMPowerRequest) returns (ServiceActionResponse);
+  rpc GetVMMetrics(VMMetricsRequest) returns (VMMetricsResponse);
+  rpc GetVMConsole(VMRequest) returns (VMConsoleResponse);
+  // Gated by supports_password_reset: set a new root password on the guest
+  // and return it. The host shows it to the customer once and never stores,
+  // logs or emails it.
+  rpc ResetVMPassword(VMRequest) returns (VMPasswordResponse);
+  // Gated by supports_reinstall: wipe the guest and install the image named
+  // in config under reinstall_key (the agent writes the customer's pick
+  // there). The response may carry a new root password, shown once like a
+  // reset; empty means the provider sets none and the reset hands it over.
+  rpc ReinstallVM(VMRequest) returns (VMPasswordResponse);
+  // Gated by supports_hostname: rename the server (its hostname on the
+  // provider). A declared refusal ("hostname taken") is FAILED_PRECONDITION.
+  rpc SetVMHostname(VMHostnameRequest) returns (VMEmpty);
+  // Gated by supports_network: the server's addresses, each with its reverse
+  // DNS and whether that record can be edited here.
+  rpc GetVMNetwork(VMRequest) returns (VMNetworkResponse);
+  // Gated by supports_reverse_dns (implies supports_network): set the PTR of
+  // one single address GetVMNetwork marked editable.
+  rpc SetVMReverseDNS(VMReverseDNSRequest) returns (VMEmpty);
+  // Gated by supports_groups: the provider-side groups (SolusVM projects) the
+  // server's owner has, which one holds the server, and moving it to another
+  // or to a new one.
+  rpc GetVMGroups(VMRequest) returns (VMGroupsResponse);
+  rpc SetVMGroup(VMGroupRequest) returns (VMGroup);
+  // Contract 10 (decisions 140 to 143). Every read carries `offered`: false
+  // when the product does not open the feature to customers, and the host
+  // then shows nothing; an action on a feature not offered is refused
+  // (FAILED_PRECONDITION).
+  //
+  // Gated by supports_private_networks: the private networks (SolusVM VPCs)
+  // the server's owner has in the server's location, which this server is
+  // on, and creating, joining, leaving and deleting them.
+  rpc GetVMPrivateNetworks(VMRequest) returns (VMPrivateNetworksResponse);
+  rpc VMPrivateNetworkAction(VMPrivateNetworkRequest) returns (VMEmpty);
+  // Gated by supports_provider_backups: backups the provider keeps of the
+  // server on its own storage (not a RackBill repository), and creating,
+  // restoring and deleting them and switching the schedule on or off.
+  rpc GetVMBackups(VMRequest) returns (VMBackupsResponse);
+  rpc VMBackupAction(VMBackupActionRequest) returns (VMEmpty);
+  // Gated by supports_boot_modes: what the server boots from next (disk,
+  // rescue, an ISO) and the ISOs it may boot. Setting it does not restart
+  // the server; the host restarts it when asked.
+  rpc GetVMBootMode(VMRequest) returns (VMBootModeResponse);
+  rpc SetVMBootMode(VMBootModeRequest) returns (VMEmpty);
+  // Gated by supports_iso_images (implies supports_boot_modes): add an ISO
+  // the provider fetches from a URL, owned by the server's owner, or delete
+  // one of the owner's own.
+  rpc VMISOAction(VMISOActionRequest) returns (VMEmpty);
+
+  // Backup capability (additive, gated by supports_backup). The provisioner
+  // knows how to snapshot its own guest; the backup repository plugin owns
+  // the storage it writes into and hands over a BackupTarget. Restores are
+  // gated by supports_restore_backup — a provisioner may be able to produce
+  // backups it cannot put back.
+  rpc BackupService(BackupServiceRequest) returns (BackupOperationResponse);
+  rpc RestoreService(RestoreServiceRequest) returns (BackupOperationResponse);
+  rpc GetServiceBackupJob(BackupJobRequest) returns (BackupOperationResponse);
+
+  // Capacity capability (additive, gated by supports_capacity): report what
+  // one registered node can hold so the agent's inventory allocator can
+  // compute stock and choose placements.
+  rpc GetNodeCapacity(NodeCapacityRequest) returns (NodeCapacityResponse);
+
+  // Config-option enumeration (additive, gated per field by
+  // ConfigField.dynamic_options): list the valid values for one config field
+  // given what the admin has entered so far, so the panel can offer a
+  // dropdown instead of a free-text box — and surface bad credentials before
+  // anything is saved. Hosts only call this for fields that declared
+  // dynamic_options; plugins without the capability return UNIMPLEMENTED.
+  rpc ListConfigOptions(ListConfigOptionsRequest) returns (ListConfigOptionsResponse);
+
+  // Panel access capability (additive, gated by supports_panel_login /
+  // supports_panel_usage). For provisioners whose remote system is a
+  // customer-facing control panel (web hosting panels, game panels): mint a
+  // single-use SSO login URL into it, and report the subscription's current
+  // resource usage. Hosts must not call these unless the matching flag is
+  // set; plugins without the capability return UNIMPLEMENTED.
+  rpc GetPanelLogin(PanelLoginRequest) returns (PanelLoginResponse);
+  rpc GetPanelUsage(PanelUsageRequest) returns (PanelUsageResponse);
+
+  // Game server capability (additive, gated by supports_game_server, which
+  // implies supports_vm — state and power ride the VM RPCs). The remote
+  // system is a game panel whose end-user surface the portal reproduces: an
+  // interactive console, files, backups, databases, schedules, network
+  // allocations, sub-users, startup variables, settings, and the activity
+  // log. One reader and one action RPC per sub-resource; a declared refusal
+  // by the panel ("backup limit reached") travels as FAILED_PRECONDITION
+  // with the panel's own reason, a transport problem as any other code.
+  // Hosts must not call these unless the flag is set; plugins without the
+  // capability return UNIMPLEMENTED.
+  rpc GetGameServer(GameServerRequest) returns (GameServerResponse);
+  rpc GetGameConsole(GameServerRequest) returns (GameConsoleResponse);
+  rpc SendGameCommand(GameCommandRequest) returns (GameAck);
+  rpc ListGameFiles(GameFilesRequest) returns (GameFilesResponse);
+  rpc ReadGameFile(GameFileReadRequest) returns (GameFileReadResponse);
+  rpc WriteGameFile(GameFileWriteRequest) returns (GameAck);
+  rpc GameFileAction(GameFileActionRequest) returns (GameFileActionResponse);
+  rpc ListGameBackups(GameServerRequest) returns (GameBackupsResponse);
+  rpc GameBackupAction(GameBackupActionRequest) returns (GameBackupActionResponse);
+  rpc ListGameDatabases(GameServerRequest) returns (GameDatabasesResponse);
+  rpc GameDatabaseAction(GameDatabaseActionRequest) returns (GameDatabaseActionResponse);
+  rpc ListGameSchedules(GameServerRequest) returns (GameSchedulesResponse);
+  rpc GameScheduleAction(GameScheduleActionRequest) returns (GameScheduleActionResponse);
+  rpc GameTaskAction(GameTaskActionRequest) returns (GameTaskActionResponse);
+  rpc ListGameAllocations(GameServerRequest) returns (GameAllocationsResponse);
+  rpc GameAllocationAction(GameAllocationActionRequest) returns (GameAllocationActionResponse);
+  rpc ListGameUsers(GameServerRequest) returns (GameUsersResponse);
+  rpc GameUserAction(GameUserActionRequest) returns (GameUserActionResponse);
+  rpc GetGameStartup(GameServerRequest) returns (GameStartupResponse);
+  rpc SetGameVariable(GameVariableSetRequest) returns (GameVariableSetResponse);
+  rpc UpdateGameSettings(GameSettingsRequest) returns (GameAck);
+  rpc ListGameActivity(GameActivityRequest) returns (GameActivityResponse);
+}
+
+message DescribeProvisionerRequest {}
+
+// ConfigField describes one admin-edited setting the plugin needs (plan id,
+// target host, ...). The admin panel renders these dynamically.
+message ConfigField {
+  string key = 1;
+  string label = 2;
+  string type = 3;      // "text", "textarea", "number", "secret", "select", "checkbox"
+  bool required = 4;
+  // Provisioners only: where the setting is entered. "product" (default,
+  // the workload — plan, template, sizes), "node" (the infrastructure — API
+  // URL, credentials, hypervisor node; rendered in the admin node editor,
+  // and declaring one such field is what makes the agent place this
+  // provisioner's services on registered nodes), or "tenant" (the account
+  // of a hosted service with one endpoint, entered once per company and
+  // applied to every product; a provisioner with no node-scoped field is
+  // never placed). On every call the plugin receives one map: product
+  // config, the service's option values, the tenant settings, then the
+  // node's config, each layer over the last. Other kinds ignore this.
+  string scope = 5;
+  // Provisioners only: the plugin can enumerate valid values for this field
+  // via ListConfigOptions once the fields named in options_depend_on are
+  // filled in. The panel renders a dropdown fed by that call instead of a
+  // free-text input, falling back to text when enumeration fails.
+  bool dynamic_options = 6;
+  repeated string options_depend_on = 7;
+  // Provisioners only: the workload dimension and unit this field sizes —
+  // "cpu_cores", "cpu_pct", "memory_mb", "memory_gb", "disk_mb", "disk_gb" —
+  // so the panel derives the allocator's resource footprint from the
+  // workload instead of asking for the same number twice. Empty = none.
+  string spec = 8;
+  // Every kind: this field decides *where* the config's secrets are sent —
+  // the base URL, host, port or endpoint, the environment/sandbox switch
+  // that chooses between them, the TLS trust settings that decide who may
+  // answer. A blank secret on save means "keep the stored one", and the
+  // agent keeps that promise only while every destination field still holds
+  // the value the secret was entered for. What the request asks for (a
+  // plan, a threshold, a from-name) is not a destination. A plugin whose
+  // endpoint is fixed in code marks nothing, and the agent — unable to tell
+  // that from a plugin built before this field existed — then treats every
+  // non-secret field as one.
+  bool destination = 9;
+  // Every kind: the fixed choices of a "select" field, in the order the
+  // panel offers them. The option whose value is "" is the field's default
+  // and is what an unset field shows; without one the panel adds a blank
+  // "Select…" entry. Each option's description is the hover/help text that
+  // explains the choice. Ignored for other types.
+  repeated ConfigFieldOption options = 10;
+  // Checkbox only: the state an unset field shows — what the plugin does
+  // when the key is absent. The panel stores "1" for checked, "0" for
+  // unchecked, and "" for whichever is the default, so an unset flag stays
+  // absent across a save. Ignored for other types.
+  bool default_checked = 11;
+  // Every kind: the limits the remote system enforces on this field's value,
+  // declared so the agent refuses a value at save instead of the remote
+  // refusing it at provision time, after the customer paid. Text-like fields
+  // use min_length/max_length (characters) and pattern (RE2, matched against
+  // the whole value); number fields use min/max (has_min/has_max say whether
+  // a bound is declared, since 0 is a real bound). An empty value is checked
+  // only by required. An agent that predates these ignores them, so a plugin
+  // still checks what it receives.
+  int32 min_length = 12;
+  int32 max_length = 13;
+  string pattern = 14;
+  bool has_min = 15;
+  int64 min = 16;
+  bool has_max = 17;
+  int64 max = 18;
+  // Every kind: one line under the input saying what the setting does; the
+  // panel appends the declared limits ("8 to 20").
+  string help = 19;
+  // Every kind: a workload value that may carry credentials (cloud-init user
+  // data). The host seals it at rest like a secret, withholds it on read,
+  // keeps it off invoices and service views, and redacts it from logs; unlike
+  // a secret it may be any type and may be offered at checkout as an option.
+  // An agent that predates this stores it in plain text, which is why it
+  // moved ContractVersion to 7.
+  bool sensitive = 20;
+}
+
+message DescribeProvisionerResponse {
+  string name = 1;                  // machine name, e.g. "cpanel"
+  string display_name = 2;
+  string version = 3;
+  repeated ConfigField config_fields = 4;
+  bool supports_vm = 5;             // GetVMState / VMPowerAction / GetVMMetrics
+  bool supports_console = 6;        // GetVMConsole (implies supports_vm)
+  bool supports_backup = 7;         // BackupService / GetServiceBackupJob
+  bool supports_restore_backup = 8; // RestoreService (implies supports_backup)
+  bool supports_capacity = 9;       // GetNodeCapacity
+  // The service label must be the domain to host: web hosting panels create
+  // an account *for* a domain, so an order without one can only fail after
+  // payment. The agent requires a valid fqdn label at order time and the
+  // panel's order form collects it as "domain" rather than a free label.
+  bool requires_domain = 10;
+  bool supports_panel_login = 11;   // GetPanelLogin
+  bool supports_panel_usage = 12;   // GetPanelUsage
+  bool supports_renew = 13;         // RenewService
+  string maturity = 14;             // "dev" | "alpha" | "beta" | "stable"; empty = alpha (see gateway.proto)
+  bool supports_game_server = 15;   // the Game* RPCs (implies supports_vm)
+  // What one registered node *is* for this integration ("one Pterodactyl
+  // location", "one Proxmox VE node"), one sentence for the admin's node
+  // editor and setup flow. Empty for provisioners without node-scoped fields,
+  // which the agent never places on a node.
+  string node_description = 16;
+  bool supports_password_reset = 17; // ResetVMPassword (implies supports_vm)
+  bool supports_reinstall = 18;      // ReinstallVM (implies supports_vm)
+  // The config key that names the image a reinstall installs
+  // ("os_image_version_id"). The agent offers the service's option for this
+  // key and writes the pick there before calling ReinstallVM.
+  string reinstall_key = 19;
+  // How far back GetVMMetrics can reach, in seconds, when the provider keeps
+  // only a short recent window (SolusVM 2 keeps about five minutes). The
+  // panel then shows that window under its own title instead of the hour,
+  // day and week choices. 0 means the timeframes are served in full.
+  int32 metrics_window_seconds = 20;
+  // A second reinstall source: the config key naming an application template
+  // ("application_id"). The agent offers the service's option for this key
+  // too; a pick from it is written here and the image key cleared, a pick of
+  // an image clears this key, so exactly one names what is installed.
+  string reinstall_app_key = 21;
+  bool supports_hostname = 22;    // SetVMHostname (implies supports_vm)
+  bool supports_network = 23;     // GetVMNetwork (implies supports_vm)
+  bool supports_reverse_dns = 24; // SetVMReverseDNS (implies supports_network)
+  bool supports_groups = 25;      // GetVMGroups / SetVMGroup (implies supports_vm)
+  // Provision and ReinstallVM read ssh_keys: the agent offers the customer's
+  // saved keys at checkout and on reinstall.
+  bool supports_ssh_keys = 26;
+  bool supports_private_networks = 27; // GetVMPrivateNetworks / VMPrivateNetworkAction
+  bool supports_provider_backups = 28; // GetVMBackups / VMBackupAction
+  bool supports_boot_modes = 29;       // GetVMBootMode / SetVMBootMode
+  bool supports_iso_images = 30;       // VMISOAction (implies supports_boot_modes)
+}
+
+// --- backup capability -------------------------------------------------------
+// BackupTarget and BackupOperationResponse live here rather than in
+// backup.proto because both contracts need them and backup.proto already
+// imports this file for ConfigField — the dependency runs one way only.
+
+// BackupTarget is the opaque address of one service's space inside a backup
+// repository, minted by the repository plugin's PrepareTarget. The agent
+// stores it and relays it verbatim; only the plugin that minted it
+// interprets the contents.
+message BackupTarget {
+  string target_ref = 1;              // e.g. PVE storage id, bucket+prefix
+  string namespace = 2;               // per-service isolation within the repo
+  map<string, string> options = 3;    // datastore, encryption key id, ...
+}
+
+// BackupOperationResponse is the shared shape of long-running backup work.
+// "pending" MUST carry a job_ref; the agent polls until the status settles,
+// exactly as it polls hosted-checkout charges and registrar transfers. Backup
+// runs take minutes to hours, so holding an RPC open is not an option.
+message BackupOperationResponse {
+  string status = 1;                  // "succeeded", "pending", "failed"
+  string failure_reason = 2;
+  string job_ref = 3;
+  string snapshot_id = 4;             // set once a create has produced one
+  int64 size_bytes = 5;
+  int32 progress_pct = 6;             // best-effort, 0 when unknown
+}
+
+message BackupServiceRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;
+  map<string, string> config = 4;     // product provision_config
+  BackupTarget target = 5;
+  string label = 6;                   // "scheduled" or "manual"
+  map<string, string> options = 7;    // compression, mode, ...
+}
+
+message RestoreServiceRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;
+  map<string, string> config = 4;
+  BackupTarget target = 5;
+  string snapshot_id = 6;
+  map<string, string> options = 7;
+}
+
+message BackupJobRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+  string job_ref = 3;
+}
+
+message ProvisionRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string account_id = 3;
+  string label = 4;
+  map<string, string> config = 5;   // product provision_config
+  // Owning account's primary contact — the owner member's login email and
+  // the account's display name — for integrations that create a per-customer
+  // login in the remote system (control panels, game panels). Either may be
+  // empty (memberless account, host predating the field); plugins must
+  // degrade gracefully rather than fabricate an address.
+  string account_email = 6;
+  string account_name = 7;
+  // The end of the period this order paid for — the service's next due date,
+  // unix seconds — so a remote object that carries its own paid-through date
+  // can be created with the right one instead of a guessed span. 0 when the
+  // service has no cycle (one-time purchases) or the host predates the field.
+  // RenewService moves it on every later renewal.
+  int64 period_end_unix = 8;
+  // Gated by supports_ssh_keys: the public keys the customer chose to install
+  // (saved on their account). Empty when none were chosen or the host
+  // predates the field.
+  repeated SSHKey ssh_keys = 9;
+  // Gated by supports_ssh_keys: every key saved on the account, for an
+  // integration that keeps a per-customer key list and fills it when it
+  // creates the customer's remote login. Never installed on this server
+  // unless also in ssh_keys.
+  repeated SSHKey account_ssh_keys = 10;
+}
+
+// SSHKey is one OpenSSH public key a customer saved on their account.
+message SSHKey {
+  string name = 1;
+  string public_key = 2;
+}
+
+message ProvisionResponse {
+  string status = 1;                // "succeeded", "failed"
+  string external_ref = 2;          // remote resource id, echoed on later calls
+  string failure_reason = 3;
+  map<string, string> details = 4;  // plugin-defined extras (ip, hostname, ...)
+}
+
+message ServiceActionRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;
+  map<string, string> config = 4;
+}
+
+message ServiceActionResponse {
+  string status = 1;                // "succeeded", "failed"
+  string failure_reason = 2;
+}
+
+// RenewServiceRequest is the ServiceActionRequest shape plus the period the
+// customer has now paid through. Answered with ServiceActionResponse: the
+// action either landed or declared why not, like every other lifecycle call.
+message RenewServiceRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;
+  map<string, string> config = 4;
+  // The service's new next due date, unix seconds: the moment the customer
+  // stops being paid up. Always set — the host never enqueues a renewal for a
+  // service without one.
+  int64 period_end_unix = 5;
+}
+
+// --- VM capability -----------------------------------------------------------
+
+// VMRequest identifies a provisioned virtual machine, same shape as
+// ServiceActionRequest: the external_ref returned by Provision plus the
+// product's provision_config.
+message VMRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;
+  map<string, string> config = 4;
+  // Only on ReinstallVM, gated by supports_ssh_keys: the keys to install.
+  repeated SSHKey ssh_keys = 5;
+}
+
+message VMEmpty {}
+
+message VMHostnameRequest {
+  VMRequest vm = 1;
+  string hostname = 2;
+}
+
+// VMAddress is one address on the server. A single address has an empty
+// range; an assigned block (an IPv6 /64) names it there, and its reverse DNS
+// is per address inside the block, never editable through this contract.
+message VMAddress {
+  string address = 1;            // the address itself (a block's primary)
+  string range = 2;              // CIDR of an assigned block, else empty
+  bool primary = 3;
+  string reverse_dns = 4;        // the PTR, empty when none is set
+  bool reverse_dns_editable = 5;
+}
+
+message VMNetworkResponse {
+  repeated VMAddress addresses = 1;
+}
+
+message VMReverseDNSRequest {
+  VMRequest vm = 1;
+  string address = 2;
+  string domain = 3;
+}
+
+message VMGroup {
+  string id = 1;
+  string name = 2;
+}
+
+message VMGroupsResponse {
+  string current_id = 1;
+  repeated VMGroup groups = 2;
+  bool can_create = 3;           // SetVMGroup accepts a new name
+}
+
+// Exactly one of group_id (an existing group) or new_name (create it for the
+// server's owner, then move the server) is set.
+message VMGroupRequest {
+  VMRequest vm = 1;
+  string group_id = 2;
+  string new_name = 3;
+}
+
+// VMPrivateNetwork is one private network of the server's owner.
+message VMPrivateNetwork {
+  string id = 1;
+  string name = 2;
+  string cidr = 3;          // the network, e.g. 10.250.0.0/24
+  bool attached = 4;        // this server is on it
+  string address = 5;       // this server's address on it, when attached
+  int32 server_count = 6;   // servers on it, this one included
+}
+
+message VMPrivateNetworksResponse {
+  bool offered = 1;
+  repeated VMPrivateNetwork networks = 2;
+  bool can_create = 3;
+}
+
+// action is create (name and cidr; the server joins the new network),
+// attach, detach or delete (network_id). A network still holding another
+// server is not deleted.
+message VMPrivateNetworkRequest {
+  VMRequest vm = 1;
+  string action = 2;
+  string network_id = 3;
+  string name = 4;
+  string cidr = 5;
+}
+
+message VMBackup {
+  string id = 1;
+  string status = 2;        // pending, ready, failed
+  string kind = 3;          // manual, scheduled
+  string type = 4;          // full, incremental; empty when unknown
+  int64 size_bytes = 5;
+  int64 created_unix = 6;
+  bool restorable = 7;
+  string note = 8;          // why it failed or cannot be restored
+}
+
+message VMBackupsResponse {
+  bool offered = 1;
+  repeated VMBackup backups = 2;
+  int32 limit = 3;          // most kept, the oldest rotated out; 0 = none
+  bool schedule_enabled = 4;
+  string schedule = 5;      // as the provider runs it, e.g. "daily 03:00 UTC"
+  bool can_schedule = 6;    // schedule_on is accepted
+  int64 next_unix = 7;      // the next scheduled run; 0 when none
+}
+
+// action is create, restore or delete (backup_id), schedule_on or
+// schedule_off. Restore overwrites the server's disks.
+message VMBackupActionRequest {
+  VMRequest vm = 1;
+  string action = 2;
+  string backup_id = 3;
+}
+
+message VMISOImage {
+  string id = 1;
+  string name = 2;
+  int64 size_bytes = 3;
+  bool own = 4;             // the server owner's own, so deletable
+}
+
+message VMBootModeResponse {
+  bool offered = 1;
+  string mode = 2;          // disk, rescue, iso
+  string iso_id = 3;        // the ISO booted in iso mode, when reported
+  repeated VMISOImage isos = 4;
+  bool can_add_iso = 5;     // VMISOAction add is accepted
+  int32 iso_limit = 6;      // most ISOs the owner may hold; 0 = none set
+}
+
+// mode is disk, rescue or iso (iso_id names one of VMBootModeResponse.isos).
+message VMBootModeRequest {
+  VMRequest vm = 1;
+  string mode = 2;
+  string iso_id = 3;
+}
+
+// action is add (name and an https url the provider fetches) or delete
+// (iso_id, one the owner owns).
+message VMISOActionRequest {
+  VMRequest vm = 1;
+  string action = 2;
+  string iso_id = 3;
+  string name = 4;
+  string url = 5;
+}
+
+// VMPasswordResponse carries a freshly set root password for the host to show
+// once; it is never stored, logged or emailed.
+message VMPasswordResponse {
+  string password = 1;
+}
+
+message VMStateResponse {
+  string state = 1;                 // "running", "stopped", "paused", "unknown"
+  int64 uptime_seconds = 2;         // 0 unless running
+  map<string, string> details = 3;  // plugin-defined extras (ip, hostname, node, ...)
+}
+
+message VMPowerRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;
+  map<string, string> config = 4;
+  string action = 5;                // "start", "shutdown", "stop", "reboot"
+}
+
+message VMMetricsRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;
+  map<string, string> config = 4;
+  // "current" (single latest sample), "hour", "day", "week". The window shape
+  // deliberately matches the designed usage-source Collect(service, window)
+  // contract so metered billing can consume the same data later.
+  string timeframe = 5;
+}
+
+// One timestamped resource sample. Gauges use absolute values (bytes, not
+// percentages) plus totals so the panel — and a future usage collector — can
+// derive both utilisation and real consumption.
+message VMMetricSample {
+  int64 unix_seconds = 1;
+  double cpu_pct = 2;               // 0-100, whole-VM (all cores)
+  int64 mem_bytes = 3;              // resident guest memory in use
+  int64 mem_total_bytes = 4;
+  int64 disk_bytes = 5;             // used; 0 = unknown (hypervisor can't see inside)
+  int64 disk_total_bytes = 6;       // allocated
+  int64 net_in_bps = 7;             // bytes/second averaged over the sample step
+  int64 net_out_bps = 8;
+}
+
+message VMMetricsResponse {
+  repeated VMMetricSample samples = 1;  // ascending by unix_seconds
+}
+
+// --- capacity capability -----------------------------------------------------
+
+// NodeCapacityRequest identifies one registered node by its node-scoped
+// config — the same map every other call receives merged over product config.
+message NodeCapacityRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+}
+
+// NodeCapacityResponse is totals plus FOREIGN commitments only: resources
+// promised to guests the platform does not manage. The agent adds its own
+// placements from its database, so a plugin reporting platform-managed guests
+// here would double-count them. 0 in a total means unknown — the allocator
+// does not constrain on dimensions the plugin cannot see.
+message NodeCapacityResponse {
+  int64 cpu_cores = 1;
+  int64 mem_total_bytes = 2;
+  int64 disk_total_bytes = 3;
+  int64 foreign_cpu_cores = 4;
+  int64 foreign_mem_bytes = 5;
+  int64 foreign_disk_bytes = 6;
+  int64 guest_count = 7;            // all guests on the node, foreign included
+  map<string, string> details = 8;  // plugin-defined extras, shown verbatim
+  // Live utilization at probe time — what the hardware is actually doing, as
+  // opposed to what has been promised. Optional: a provisioner whose API
+  // exposes no live host load leaves it unset and the panel shows allocation
+  // only; set it only from a real measurement, never from allocation sums.
+  NodeUsage usage = 9;
+  // capacity_advisory says the upstream enforces its own capacity and places
+  // guests itself (a panel's deploy viability, SolusVM's scheduler): the
+  // figures are reported and forecast, and are the agent's default for not
+  // bounding stock or placement on this node. An admin can switch placement
+  // on or off per provider; an older agent ignores the field and bounds.
+  bool capacity_advisory = 10;
+}
+
+// NodeUsage is one node's measured utilization. cpu_percent is 0–100 across
+// the whole node (all cores); the byte figures are in-use bytes of the same
+// totals the response reports, so a dimension whose total is 0 (unknown)
+// leaves its used figure 0 as well.
+message NodeUsage {
+  double cpu_percent = 1;
+  int64 mem_used_bytes = 2;
+  int64 disk_used_bytes = 3;
+}
+
+// --- config-option enumeration ----------------------------------------------
+
+// ListConfigOptionsRequest asks for the valid values of one config field.
+// config is whatever the admin has entered so far — at minimum the fields the
+// target field declared in options_depend_on; anything else (ca_pem,
+// insecure_tls) rides along so the plugin can build its client the same way
+// every other call does.
+message ListConfigOptionsRequest {
+  string tenant_id = 1;
+  string key = 2;                   // the ConfigField being enumerated
+  map<string, string> config = 3;
+}
+
+message ConfigFieldOption {
+  string value = 1;                 // what gets stored in config
+  string label = 2;                 // what the admin sees; defaults to value
+  string description = 3;           // what choosing it means; hover/help text, optional
+}
+
+message ListConfigOptionsResponse {
+  repeated ConfigFieldOption options = 1;
+  // Rotated credentials an accounting plugin's enumeration produced (contract
+  // 14); the host persists them as it does for AccountingSyncResponse. Other
+  // kinds leave it empty.
+  map<string, string> config_updates = 2;
+  // A declared failure that still carries config_updates: the token exchange
+  // rotated, then the listing failed. The host saves the rotation first and
+  // shows this reason. Empty means success. Accounting only (contract 15).
+  string failure_reason = 3;
+}
+
+// --- panel access capability --------------------------------------------------
+
+// PanelLoginRequest identifies a provisioned service, same shape as
+// ServiceActionRequest, plus the requesting user's IP address: control panels
+// commonly bind an SSO session to the browser IP that will redeem it (Plesk's
+// create_session does), so the agent forwards the portal request's origin.
+message PanelLoginRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;
+  map<string, string> config = 4;
+  string user_ip = 5;
+}
+
+// PanelLoginResponse carries a single-use login URL into the remote control
+// panel. Unlike the VM console there is nothing to bridge: a hosting panel is
+// customer-reachable by definition, so the browser navigates to the URL
+// directly and the credential inside it never rests anywhere.
+message PanelLoginResponse {
+  string status = 1;                // "succeeded", "failed"
+  string failure_reason = 2;        // declared failure, shown to the user
+  string login_url = 3;
+  int64 expires_unix = 4;           // validity hint; 0 = unknown
+}
+
+// PanelUsageRequest identifies a provisioned service, same shape as
+// ServiceActionRequest.
+message PanelUsageRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;
+  map<string, string> config = 4;
+}
+
+// PanelUsageGauge is one current used/limit reading for the subscription —
+// a gauge, deliberately not the usage-source Collect shape (integrated
+// consumption for metered billing, §8 of the architecture doc) and not a
+// VM metric sample: hosting panels report "disk used now" and "traffic so
+// far this period" against plan limits, and that is what portals display.
+message PanelUsageGauge {
+  string metric = 1;                // stable key, e.g. "disk_space", "traffic"
+  string label = 2;                 // human label, shown verbatim
+  int64 used = 3;
+  int64 limit = 4;                  // 0 = unlimited or unknown
+  string unit = 5;                  // "bytes" (the only unit in use today)
+}
+
+message PanelUsageResponse {
+  repeated PanelUsageGauge gauges = 1;
+}
+
+// VMConsoleResponse carries everything the agent needs to bridge a browser
+// websocket to the hypervisor's console websocket. websocket_url and headers
+// are used server-side only and never reach the browser; password is handed
+// to the browser's VNC client for the in-tunnel RFB handshake.
+message VMConsoleResponse {
+  string type = 1;                  // "vnc" (RFB over websocket)
+  string websocket_url = 2;         // wss://... dialed by the agent (outbound)
+  map<string, string> headers = 3;  // auth headers for that dial
+  string password = 4;              // one-time console ticket/password
+  // TLS trust for the agent's outbound dial. Prefer ca_pem (pin the
+  // hypervisor's CA); insecure_skip_verify is a last-resort operator opt-in
+  // for lab setups and is ignored when ca_pem is set.
+  bool insecure_skip_verify = 5;
+  int64 expires_unix = 6;           // validity hint; 0 = unknown
+  string ca_pem = 7;                // PEM CA bundle to verify websocket_url against
+}
+
+// --- game server capability ---------------------------------------------------
+// The end-user surface of a game panel (Pterodactyl, Pelican, …): everything
+// a customer does to their own server short of the billing relationship.
+// Power and state ride the VM RPCs; the rest is here, one sub-resource at a
+// time. Lists report the panel's limit beside the rows (0 = unlimited or not
+// applicable) so the portal can say "2 of 3 backups" without a second call.
+
+// GameRef identifies a provisioned game server; the VMRequest shape.
+message GameRef {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;
+  map<string, string> config = 4;
+}
+
+message GameServerRequest { GameRef ref = 1; }
+
+message GameAck {}
+
+message GameLimits {
+  int64 memory_bytes = 1;   // 0 = unlimited
+  int64 swap_bytes = 2;     // -1 = unlimited, 0 = none
+  int64 disk_bytes = 3;     // 0 = unlimited
+  int64 cpu_pct = 4;        // 100 = one core; 0 = unlimited
+  int64 io_weight = 5;
+  string threads = 6;       // pinned CPU threads, panel syntax; "" = any
+  bool oom_killer = 7;      // true = the kernel may OOM-kill the server
+}
+
+message GameFeatureLimits {
+  int32 databases = 1;
+  int32 backups = 2;
+  int32 allocations = 3;
+}
+
+message GameServerResponse {
+  string name = 1;
+  string description = 2;
+  // "" (normal), "installing", "install_failed", "suspended",
+  // "restoring_backup", "transferring" — the panel's own vocabulary, for
+  // the portal to explain why controls are unavailable.
+  string status = 3;
+  string address = 4;       // primary connect address, host:port
+  string sftp_host = 5;
+  int32 sftp_port = 6;
+  string sftp_username = 7;
+  GameLimits limits = 8;
+  GameFeatureLimits feature_limits = 9;
+  // Which sub-resources this server offers — "console", "command", "files",
+  // "backups", "databases", "schedules", "network", "users", "startup",
+  // "settings", "activity". A panel whose server has a backup limit of zero
+  // omits "backups"; the portal renders tabs for what is listed.
+  repeated string features = 10;
+  string docker_image = 11;
+  string invocation = 12;   // the rendered startup command
+  string panel_url = 13;    // the server's page in the panel itself, for a link out
+  map<string, string> details = 14; // node, egg/game name, … shown verbatim
+}
+
+// GameConsoleResponse is what the agent needs to bridge a browser to the
+// panel daemon's console websocket. The token stays server-side: the agent
+// authenticates upstream and re-mints through GetGameConsole when the daemon
+// announces expiry. Protocol names the event dialect ("wings" — Pterodactyl
+// and Pelican share it); the agent refuses protocols it cannot speak.
+message GameConsoleResponse {
+  string protocol = 1;
+  string websocket_url = 2;
+  map<string, string> headers = 3;  // Origin and friends for the dial
+  string token = 4;
+  int64 expires_unix = 5;           // 0 = unknown
+  string ca_pem = 6;
+  bool insecure_skip_verify = 7;
+}
+
+message GameCommandRequest {
+  GameRef ref = 1;
+  string command = 2;
+}
+
+message GameFile {
+  string name = 1;
+  int64 size = 2;
+  bool is_file = 3;
+  bool is_symlink = 4;
+  string mode = 5;          // "-rw-r--r--"
+  string mode_bits = 6;     // "0644"
+  string mime_type = 7;
+  int64 modified_unix = 8;
+  int64 created_unix = 9;
+}
+
+message GameFilesRequest {
+  GameRef ref = 1;
+  string directory = 2;     // absolute within the server, "/" = root
+}
+
+message GameFilesResponse { repeated GameFile files = 1; }
+
+message GameFileReadRequest {
+  GameRef ref = 1;
+  string path = 2;
+}
+
+message GameFileReadResponse { bytes content = 1; }
+
+message GameFileWriteRequest {
+  GameRef ref = 1;
+  string path = 2;
+  bytes content = 3;
+}
+
+message GameRename {
+  string from = 1;
+  string to = 2;
+}
+
+// GameFileActionRequest: action ∈ rename (root + renames), copy (files[0]),
+// delete (root + files), mkdir (root + name), compress (root + files →
+// file), decompress (root + files[0]), chmod (root + files[0] + mode), pull
+// (root + url + name), download (files[0] → url), upload (root → url).
+message GameFileActionRequest {
+  GameRef ref = 1;
+  string action = 2;
+  string root = 3;
+  repeated string files = 4;
+  repeated GameRename renames = 5;
+  string name = 6;
+  string mode = 7;
+  string url = 8;
+}
+
+message GameFileActionResponse {
+  GameFile file = 1;        // compress: the archive created
+  string url = 2;           // download / upload: a signed daemon URL
+}
+
+message GameBackup {
+  string id = 1;
+  string name = 2;
+  repeated string ignored_files = 3;
+  int64 bytes = 4;
+  string checksum = 5;
+  bool successful = 6;
+  bool locked = 7;
+  bool completed = 8;
+  int64 created_unix = 9;
+  int64 completed_unix = 10;
+}
+
+message GameBackupsResponse {
+  repeated GameBackup backups = 1;
+  int32 limit = 2;
+}
+
+// action ∈ create (name, ignored, locked), delete, lock, unlock, restore
+// (truncate), download (→ url).
+message GameBackupActionRequest {
+  GameRef ref = 1;
+  string action = 2;
+  string id = 3;
+  string name = 4;
+  string ignored = 5;       // newline-separated ignore patterns
+  bool locked = 6;
+  bool truncate = 7;        // restore: wipe the server's files first
+}
+
+message GameBackupActionResponse {
+  GameBackup backup = 1;
+  string url = 2;
+}
+
+message GameDatabase {
+  string id = 1;
+  string name = 2;
+  string username = 3;
+  string password = 4;
+  string host = 5;
+  int32 port = 6;
+  string connections_from = 7;
+  int32 max_connections = 8;
+}
+
+message GameDatabasesResponse {
+  repeated GameDatabase databases = 1;
+  int32 limit = 2;
+}
+
+// action ∈ create (name, remote), rotate, delete.
+message GameDatabaseActionRequest {
+  GameRef ref = 1;
+  string action = 2;
+  string id = 3;
+  string name = 4;
+  string remote = 5;
+}
+
+message GameDatabaseActionResponse { GameDatabase database = 1; }
+
+message GameCron {
+  string minute = 1;
+  string hour = 2;
+  string day_of_month = 3;
+  string month = 4;
+  string day_of_week = 5;
+}
+
+message GameTask {
+  string id = 1;
+  int32 sequence = 2;
+  string action = 3;        // "command", "power", "backup"
+  string payload = 4;
+  int32 time_offset = 5;    // seconds after the previous task
+  bool continue_on_failure = 6;
+  bool queued = 7;
+}
+
+message GameSchedule {
+  string id = 1;
+  string name = 2;
+  GameCron cron = 3;
+  bool active = 4;
+  bool processing = 5;
+  bool only_when_online = 6;
+  int64 last_run_unix = 7;
+  int64 next_run_unix = 8;
+  int64 created_unix = 9;
+  repeated GameTask tasks = 10;
+}
+
+message GameSchedulesResponse { repeated GameSchedule schedules = 1; }
+
+// action ∈ save (id empty = create), delete, execute.
+message GameScheduleActionRequest {
+  GameRef ref = 1;
+  string action = 2;
+  string id = 3;
+  string name = 4;
+  GameCron cron = 5;
+  bool active = 6;
+  bool only_when_online = 7;
+}
+
+message GameScheduleActionResponse { GameSchedule schedule = 1; }
+
+// action ∈ save (id empty = create), delete.
+message GameTaskActionRequest {
+  GameRef ref = 1;
+  string action = 2;
+  string schedule_id = 3;
+  string id = 4;
+  string task_action = 5;
+  string payload = 6;
+  int32 time_offset = 7;
+  bool continue_on_failure = 8;
+}
+
+message GameTaskActionResponse { GameTask task = 1; }
+
+message GameAllocation {
+  string id = 1;
+  string ip = 2;
+  string alias = 3;
+  int32 port = 4;
+  string notes = 5;
+  bool primary = 6;
+}
+
+message GameAllocationsResponse {
+  repeated GameAllocation allocations = 1;
+  int32 limit = 2;
+}
+
+// action ∈ add (the panel picks a free port), notes, primary, delete.
+message GameAllocationActionRequest {
+  GameRef ref = 1;
+  string action = 2;
+  string id = 3;
+  string notes = 4;
+}
+
+message GameAllocationActionResponse { GameAllocation allocation = 1; }
+
+message GameUser {
+  string id = 1;
+  string username = 2;
+  string email = 3;
+  string image = 4;
+  bool two_factor = 5;
+  repeated string permissions = 6;
+  int64 created_unix = 7;
+}
+
+message GamePermission {
+  string key = 1;
+  string description = 2;
+}
+
+message GamePermissionGroup {
+  string key = 1;
+  string description = 2;
+  repeated GamePermission permissions = 3;
+}
+
+message GameUsersResponse {
+  repeated GameUser users = 1;
+  repeated GamePermissionGroup catalog = 2;  // every permission the panel knows
+}
+
+// action ∈ save (id empty = invite by email), delete.
+message GameUserActionRequest {
+  GameRef ref = 1;
+  string action = 2;
+  string id = 3;
+  string email = 4;
+  repeated string permissions = 5;
+}
+
+message GameUserActionResponse { GameUser user = 1; }
+
+message GameVariable {
+  string name = 1;
+  string description = 2;
+  string env_variable = 3;
+  string default_value = 4;
+  string value = 5;
+  bool editable = 6;
+  string rules = 7;         // the panel's validation rules, verbatim
+}
+
+message GameStartupResponse {
+  string command = 1;       // rendered with variable values
+  string raw_command = 2;   // with {{PLACEHOLDERS}}
+  repeated GameVariable variables = 3;
+  string docker_image = 4;
+  map<string, string> docker_images = 5;  // label → image the egg allows
+}
+
+message GameVariableSetRequest {
+  GameRef ref = 1;
+  string key = 2;
+  string value = 3;
+}
+
+message GameVariableSetResponse { GameVariable variable = 1; }
+
+// action ∈ rename (name, description), reinstall, docker_image.
+message GameSettingsRequest {
+  GameRef ref = 1;
+  string action = 2;
+  string name = 3;
+  string description = 4;
+  string docker_image = 5;
+}
+
+message GameActivity {
+  string id = 1;
+  string event = 2;         // "server:power.start", "server:file.write", …
+  string description = 3;
+  string actor = 4;         // who did it, as the panel names them
+  string ip = 5;
+  bool api = 6;             // through an API key rather than the panel UI
+  map<string, string> properties = 7;  // event-specific, values JSON-encoded when nested
+  int64 timestamp_unix = 8;
+}
+
+message GameActivityRequest {
+  GameRef ref = 1;
+  int32 page = 2;           // 1-based
+}
+
+message GameActivityResponse {
+  repeated GameActivity entries = 1;
+  int32 page = 2;
+  int32 total_pages = 3;
+}

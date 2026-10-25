@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+import "plugin/proto/provisioner.proto";
+
+// IPAMProvider is implemented by plugins that speak to a standalone IP address
+// management system — NetBox, phpIPAM, and their kin — so an operator who
+// already keeps their address plan there can make it RackBill's upstream
+// source of truth instead of retyping blocks into the panel.
+//
+// The division of labour: the IPAM owns the address plan (which prefixes
+// exist, which addresses inside them are taken, by whom). RackBill owns the
+// billing policy (which prefixes it may sell from, which pool they feed, what
+// an address costs) and the customer-facing state (which service holds an
+// address, its reverse DNS). RackBill mirrors upstream prefixes as linked IP
+// blocks, mirrors upstream-held addresses as reservations it will never hand
+// out, and writes its own allocations back so the IPAM keeps being right.
+//
+// Config is per tenant (one IPAM per hosting company), declared through
+// config_fields exactly like every other kind; secret-typed values are sealed
+// at rest by the agent and opened per call. Every call is unary and either
+// interactive (listing, driven by an admin button with a seconds-scale
+// budget) or outbox-driven (allocate/update/release, retried by the agent —
+// never retry inside the plugin).
+service IPAMProvider {
+  rpc DescribeIPAMProvider(DescribeIPAMProviderRequest) returns (DescribeIPAMProviderResponse);
+  // ListIPAMPrefixes returns the prefixes the operator's filter (config)
+  // exposes to RackBill. A container prefix (one that only holds smaller
+  // prefixes) may be listed but is not importable; the agent shows it as such.
+  rpc ListIPAMPrefixes(ListIPAMPrefixesRequest) returns (ListIPAMPrefixesResponse);
+  // ListIPAMAddresses returns every address the IPAM has *recorded* inside a
+  // prefix — never the enumeration of the prefix. An address absent from the
+  // answer is free upstream.
+  rpc ListIPAMAddresses(ListIPAMAddressesRequest) returns (ListIPAMAddressesResponse);
+  // AllocateIPAMAddress records one specific address in the IPAM on
+  // RackBill's behalf. The address is named by the agent (it claimed it from
+  // its mirror); the IPAM is the arbiter: an address already recorded there
+  // for something else answers "conflict" with the holder's description, and
+  // the agent moves the customer to another address. An address the IPAM
+  // already records *for RackBill* (a retried call) is success, returning the
+  // existing object.
+  rpc AllocateIPAMAddress(AllocateIPAMAddressRequest) returns (IPAMAddressResponse);
+  // UpdateIPAMAddress rewrites the hostname/description/status of an address
+  // RackBill holds (a customer set reverse DNS; a service changed hands).
+  rpc UpdateIPAMAddress(UpdateIPAMAddressRequest) returns (IPAMAddressResponse);
+  // ReleaseIPAMAddress removes RackBill's record of an address from the IPAM.
+  // Releasing an address the IPAM no longer holds is success — the agent
+  // retries, and only the end state matters.
+  rpc ReleaseIPAMAddress(ReleaseIPAMAddressRequest) returns (IPAMReleaseResponse);
+}
+
+message DescribeIPAMProviderRequest {}
+
+message DescribeIPAMProviderResponse {
+  string name = 1;                        // machine name, e.g. "netbox"
+  string display_name = 2;
+  string version = 3;
+  string maturity = 4;                    // "dev" | "alpha" | "beta" | "stable"; empty = alpha (see gateway.proto)
+  repeated ConfigField config_fields = 5; // tenant-level settings: URL, credentials, prefix filter
+}
+
+// IPAMPrefix is one prefix as the IPAM records it. ref is the IPAM's own
+// identifier for the object (NetBox id, phpIPAM subnet id) and is what the
+// agent stores on the linked block and sends back on every later call;
+// cidr is canonical "network/bits".
+message IPAMPrefix {
+  string ref = 1;
+  string cidr = 2;
+  string description = 3;
+  string status = 4;         // "active", "reserved", "deprecated", "container", "" (unknown)
+  string gateway = 5;        // the prefix's gateway address when the IPAM records one; "" otherwise
+  string vrf = 6;            // routing-domain label when the IPAM has the concept; informational
+  repeated string tags = 7;  // informational
+  bool importable = 8;       // false for containers and anything the plugin knows cannot hold hosts
+}
+
+message ListIPAMPrefixesRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+}
+
+message ListIPAMPrefixesResponse {
+  repeated IPAMPrefix prefixes = 1;
+}
+
+// IPAMAddress is one recorded address. ref is the IPAM's object id;
+// address is the bare address (no prefix length). holder is a free-text
+// rendering of who has it — an assigned device/interface, an owner field, a
+// hostname — used verbatim in the agent's reservation note when the address
+// is not RackBill's.
+message IPAMAddress {
+  string ref = 1;
+  string address = 2;
+  string status = 3;         // "active", "reserved", "deprecated", "dhcp", "" (unknown)
+  string hostname = 4;
+  string description = 5;
+  string holder = 6;
+  repeated string tags = 7;
+  // rackbill is true when the IPAM's record carries RackBill's own marker
+  // (the description/tag the agent asked for on allocation), so the agent
+  // can recognise its allocations even when the stored ref was lost.
+  bool rackbill = 8;
+}
+
+message ListIPAMAddressesRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+  string prefix_ref = 3;
+  string cidr = 4;           // the prefix's CIDR, for IPAMs that filter by network rather than by id
+}
+
+message ListIPAMAddressesResponse {
+  repeated IPAMAddress addresses = 1;
+}
+
+message AllocateIPAMAddressRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+  string prefix_ref = 3;
+  string cidr = 4;           // the prefix's CIDR (the IPAM may need the mask to record the address)
+  string address = 5;        // the specific address the agent claimed
+  string status = 6;         // "active" (assigned to a service) or "reserved" (held back by an admin)
+  string hostname = 7;       // reverse-DNS name when the customer set one; may be empty
+  string description = 8;    // RackBill's marker text — who holds it and why
+}
+
+message UpdateIPAMAddressRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+  string ref = 3;            // the IPAM object id from a previous allocation
+  string address = 4;
+  string status = 5;
+  string hostname = 6;
+  string description = 7;
+}
+
+// IPAMAddressResponse answers allocate and update. "conflict" is the
+// declared outcome for an address the IPAM already holds for someone else
+// (holder says who); "failed" is a declared refusal for any other reason.
+// Transport-level problems are errors and the agent retries them.
+message IPAMAddressResponse {
+  string status = 1;         // "succeeded", "conflict", "failed"
+  string failure_reason = 2;
+  IPAMAddress address = 3;   // the recorded object on success (ref filled)
+  string holder = 4;         // on conflict: who holds the address upstream
+}
+
+message ReleaseIPAMAddressRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+  string ref = 3;
+  string address = 4;
+  string prefix_ref = 5;
+}
+
+message IPAMReleaseResponse {
+  string status = 1;         // "succeeded", "failed"
+  string failure_reason = 2;
+}

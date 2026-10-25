@@ -21,6 +21,19 @@ Plugins are not limited to Go: any language can implement the gRPC services
 directly from the proto files in [`plugin/proto/`](plugin/proto/) (package
 `rackbill.plugin.v1`).
 
+## Example plugins
+
+The SDK includes two buildable scaffolds:
+
+- [Notifier](examples/notifier-example/): a small example showing plugin identity,
+  configuration, request handling, logging and `sdk.ServeNotifier`.
+- [Provisioner](examples/provisioner-example/): commented stubs for the required
+  lifecycle and optional VM, backup, capacity, panel and game-server methods.
+  Capability flags stay disabled until you implement the corresponding methods.
+
+Each example's README explains how to build it, inspect its metadata and copy it
+into your own module. Provider operations are left for your implementation.
+
 ## Installing and choosing a version
 
 The SDK is published in

@@ -1,0 +1,17 @@
+[
+  {"currency":"USD","minor":1500,"decimal":"15.00"},
+  {"currency":"EUR","minor":1501,"decimal":"15.01"},
+  {"currency":"JPY","minor":1500,"decimal":"1500"},
+  {"currency":"KWD","minor":1500,"decimal":"1.500"},
+  {"currency":"BHD","minor":1,"decimal":"0.001"},
+  {"currency":"ISK","minor":1500,"decimal":"15.00"},
+  {"currency":"UGX","minor":1500,"decimal":"15.00"},
+  {"currency":"HUF","minor":1500,"decimal":"15.00"},
+  {"currency":"TWD","minor":1501,"decimal":"15.01"},
+  {"currency":"CLF","minor":15001,"decimal":"1.5001"},
+  {"currency":"USD","minor":-1,"decimal":"-0.01"},
+  {"currency":"KWD","minor":-1500,"decimal":"-1.500"},
+  {"currency":"USD","minor":9007199254740991,"decimal":"90071992547409.91"},
+  {"currency":"KWD","minor":9007199254740991,"decimal":"9007199254740.991"},
+  {"currency":"JPY","minor":9007199254740991,"decimal":"9007199254740991"}
+]

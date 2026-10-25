@@ -1,0 +1,180 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+import "plugin/proto/provisioner.proto";
+
+// OOBProvider is implemented by out-of-band management plugins: drivers that
+// speak to KVM/BMC endpoints — IPMI, iDRAC, iLO, Redfish, standalone
+// KVM-over-IP units — living on a private management network the operator's
+// customers can never reach directly. The agent owns the device inventory
+// (addresses, sealed credentials, entitlement); the plugin owns the protocol.
+//
+// Consoles follow decision 10: MintOOBConsole returns dial info for a
+// websocket and the agent (or the satellite that hosts the plugin) makes the
+// outbound dial and splices bytes — console traffic never crosses gRPC. A
+// protocol with no native websocket (IPMI Serial-over-LAN is RMCP+ over UDP
+// 623) is terminated inside the plugin, which re-exposes the session as a
+// one-time-ticketed loopback websocket and mints that URL.
+//
+// Every call is interactive — a human is watching a button or a terminal —
+// so budgets are seconds-scale and declared refusals (a busy SOL session,
+// an unsupported action) travel as FAILED_PRECONDITION with the reason the
+// user should read verbatim (the game-capability convention).
+service OOBProvider {
+  rpc DescribeOOBProvider(DescribeOOBProviderRequest) returns (DescribeOOBProviderResponse);
+  rpc ProbeOOBDevice(OOBDeviceRequest) returns (ProbeOOBDeviceResponse);
+  rpc GetOOBPowerState(OOBDeviceRequest) returns (OOBPowerStateResponse);
+  rpc OOBPowerAction(OOBPowerActionRequest) returns (OOBPowerActionResponse);
+  rpc MintOOBConsole(MintOOBConsoleRequest) returns (OOBConsoleResponse);
+  rpc ReadOOBSensors(OOBDeviceRequest) returns (OOBSensorsResponse);
+  rpc ReadOOBEventLog(OOBEventLogRequest) returns (OOBEventLogResponse);
+  // DescribeOOBDevice is what the driver can say about one device *without
+  // dialing it* — a pure function of the address and config the agent
+  // holds, answered in well under a second. The agent asks when a device is
+  // saved and again on every Test, and stores the answer on the row
+  // (contract 4, decision 120). Drivers built before it never receive the
+  // call; drivers with nothing to declare answer empty strings.
+  rpc DescribeOOBDevice(OOBDeviceRequest) returns (DescribeOOBDeviceResponse);
+}
+
+message DescribeOOBProviderRequest {}
+
+message DescribeOOBProviderResponse {
+  string name = 1;                        // machine name, e.g. "bmc"
+  string display_name = 2;
+  string version = 3;
+  string maturity = 4;                    // "dev" | "alpha" | "beta" | "stable"; empty = alpha (see gateway.proto)
+  repeated ConfigField config_fields = 5; // per-device settings (protocol, username, password, ports)
+  repeated string protocols = 6;          // informational: "ipmi", "redfish", ... shown in the driver picker
+  // Driver-level capability flags (§5). What a *device* offers is the
+  // ProbeOOBDevice answer; the agent only calls an RPC when both agree.
+  bool supports_power = 7;
+  bool supports_sol = 8;                  // text console (kind "sol")
+  bool supports_kvm = 9;                  // graphical console (kind "kvm")
+  bool supports_sensors = 10;             // ReadOOBSensors / ReadOOBEventLog
+}
+
+// OOBDeviceRequest identifies one device for any per-device call. Address is
+// the inventory's dial target (host or host:port) — first-class so drivers
+// never parse it out of config, and so the agent's policy checks and the
+// device row stay the single source of what gets dialed. Config carries the
+// driver-declared fields with secret values already opened by the agent.
+message OOBDeviceRequest {
+  string tenant_id = 1;
+  string device_id = 2;
+  string address = 3;
+  map<string, string> config = 4;
+}
+
+// ProbeOOBDeviceResponse reports what this device is and offers. status is
+// "ok", "unreachable", "auth_failed", or "failed" — a probe that cannot reach
+// the BMC is an answer, not an error. Capability booleans are meaningful only
+// when status is "ok"; details are plugin-defined facts shown verbatim.
+message ProbeOOBDeviceResponse {
+  string status = 1;
+  string detail = 2;                 // human-readable, e.g. the auth error
+  string vendor = 3;
+  string model = 4;
+  string firmware = 5;
+  bool supports_power = 6;
+  bool supports_sol = 7;
+  bool supports_kvm = 8;
+  bool supports_sensors = 9;
+  map<string, string> details = 10;
+}
+
+// DescribeOOBDeviceResponse declares, per device, which consoles the driver
+// offers on it, in three answers rather than two: "yes" (offer the console
+// whatever any probe found), "no" (withdraw it without a probe), or ""
+// (undeclared — the agent falls back to its probe rule for that console).
+// A declaration only ever subtracts from the driver's own Describe flags: a
+// "yes" restores a console a probe had withdrawn, it never adds one the
+// driver does not bridge. Unlike ProbeOOBDeviceResponse's booleans, these are
+// answered from configuration alone and are valid without a probe status.
+message DescribeOOBDeviceResponse {
+  string sol = 1;                    // "yes" | "no" | "" — the text console (kind "sol")
+  string kvm = 2;                    // "yes" | "no" | "" — the graphical console (kind "kvm")
+}
+
+message OOBPowerStateResponse {
+  string state = 1;                  // "on", "off", "unknown"
+  map<string, string> details = 2;   // plugin-defined, shown verbatim
+}
+
+message OOBPowerActionRequest {
+  OOBDeviceRequest device = 1;
+  string action = 2;                 // "on", "off_soft", "off_hard", "cycle", "reset"
+}
+
+// Already-in-target-state is success (the VM-capability rule); a BMC that
+// says no for a reason the user should read refuses via FAILED_PRECONDITION
+// instead of filling failure_reason.
+message OOBPowerActionResponse {
+  string status = 1;                 // "succeeded", "failed"
+  string failure_reason = 2;
+}
+
+message MintOOBConsoleRequest {
+  OOBDeviceRequest device = 1;
+  string kind = 2;                   // "sol" | "kvm"
+  string client_ip = 3;              // the portal request's origin, for drivers that bind sessions
+}
+
+// OOBConsoleResponse mirrors VMConsoleResponse (fields 1–7 match) so the
+// agent's bridge and the satellite console relay carry both without caring
+// which kind minted. type "term" is a raw byte stream rendered by a terminal
+// (stdin up, output down — no password); type "vnc" is RFB over websocket
+// rendered by noVNC, and password completes that handshake in the tunnel only
+// where the credential is a per-session one. A driver whose credential outlives
+// the session terminates the RFB handshake itself and sends none.
+message OOBConsoleResponse {
+  string type = 1;                   // "term" | "vnc"
+  string websocket_url = 2;          // dialed outbound by the agent/satellite; may be plugin-loopback
+  map<string, string> headers = 3;   // auth headers for that dial
+  string password = 4;               // vnc only: a session-scoped in-tunnel RFB password, readable by the customer
+  bool insecure_skip_verify = 5;     // lab-only opt-in, ignored when ca_pem is set
+  int64 expires_unix = 6;            // dial-by deadline for the one-time ticket; 0 = unknown
+  string ca_pem = 7;                 // PEM CA bundle to verify websocket_url against
+
+  // 8 was `messages`, the satellite relay's message-framing mode. Both
+  // out-of-band console types are byte streams — a serial stream and RFB —
+  // and the bridge splices bytes, so asking the relay to length-prefix
+  // frames only spliced the prefixes into the console as garbage. A
+  // message-oriented out-of-band protocol would need real bridge support,
+  // and would arrive with its own field rather than reviving this one.
+  reserved 8;
+}
+
+message OOBSensorsResponse {
+  repeated OOBSensor sensors = 1;
+}
+
+// One BMC sensor reading. label and unit are the BMC's own words, shown
+// verbatim (the MAAS honesty rule: no fabricated normalization).
+message OOBSensor {
+  string id = 1;
+  string label = 2;
+  string kind = 3;                   // "temperature", "fan", "voltage", "power", "other"
+  double value = 4;
+  string unit = 5;                   // verbatim, e.g. "degrees C", "RPM"
+  string status = 6;                 // "ok", "warning", "critical", "unknown"
+}
+
+message OOBEventLogRequest {
+  OOBDeviceRequest device = 1;
+  int32 limit = 2;                   // newest-first cap; 0 = driver default
+}
+
+message OOBEventLogResponse {
+  repeated OOBEvent events = 1;
+}
+
+// One system event log entry, newest first, text verbatim from the BMC.
+message OOBEvent {
+  int64 time_unix = 1;               // 0 = unknown (dead RTC SELs are common)
+  string severity = 2;               // "info", "warning", "critical", "unknown"
+  string message = 3;
+}

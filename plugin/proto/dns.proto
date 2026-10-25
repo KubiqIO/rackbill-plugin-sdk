@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+import "plugin/proto/provisioner.proto";
+
+// DNSProvider is implemented by out-of-process DNS plugins (PowerDNS, BIND
+// via RFC2136, hosted APIs). RackBill's primary use is reverse DNS: customers
+// set PTR records for the IPs assigned to their services, and the agent
+// applies them through the provider that owns the reverse zone. Forward
+// records are an optional capability for providers that also host zones.
+//
+// The agent owns desired state (an IP's PTR value lives in the IPAM tables);
+// the plugin owns the zone. Calls are driven from a retrying job outbox, so
+// a DNS outage delays propagation, never the panel.
+service DNSProvider {
+  rpc DescribeDNSProvider(DescribeDNSProviderRequest) returns (DescribeDNSProviderResponse);
+  rpc UpsertRecord(UpsertRecordRequest) returns (DNSRecordResponse);
+  rpc DeleteRecord(DeleteRecordRequest) returns (DNSRecordResponse);
+}
+
+message DescribeDNSProviderRequest {}
+
+message DescribeDNSProviderResponse {
+  string name = 1;                        // machine name, e.g. "powerdns"
+  string display_name = 2;
+  string version = 3;
+  bool supports_ptr = 4;                  // reverse zones (the IPAM use case)
+  bool supports_forward = 5;              // A/AAAA/CNAME/... in forward zones
+  repeated ConfigField config_fields = 6; // per-block settings (API URL, key, server id)
+  string maturity = 7;                    // "dev" | "alpha" | "beta" | "stable"; empty = alpha (see gateway.proto)
+}
+
+// UpsertRecordRequest replaces the record set at (zone, name, type) with a
+// single value — RackBill never manages multi-value PTR sets. zone is the
+// authoritative zone the record lives in (e.g. "3.2.1.in-addr.arpa"); name
+// is the fully-qualified record name (e.g. "4.3.2.1.in-addr.arpa"); value is
+// the target hostname for PTR/CNAME or the address for A/AAAA. Both zone and
+// name arrive without a trailing dot; providers that need one add it.
+message UpsertRecordRequest {
+  string tenant_id = 1;
+  string zone = 2;
+  string name = 3;
+  string type = 4;                  // "PTR", "A", "AAAA", "CNAME", "TXT"
+  string value = 5;
+  int32 ttl_seconds = 6;            // 0 = provider default
+  map<string, string> config = 7;   // the block's dns_config
+}
+
+message DeleteRecordRequest {
+  string tenant_id = 1;
+  string zone = 2;
+  string name = 3;
+  string type = 4;
+  map<string, string> config = 5;
+}
+
+// Deleting a record that does not exist is success — the agent retries, and
+// the caller only cares about the end state.
+message DNSRecordResponse {
+  string status = 1;                // "succeeded", "failed"
+  string failure_reason = 2;
+}

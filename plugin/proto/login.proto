@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+import "plugin/proto/provisioner.proto";
+
+// LoginProvider is implemented by out-of-process OAuth login plugins
+// (Google, GitHub, Discord, ...). The agent owns the whole browser dance:
+// it mints and validates the state parameter, generates the PKCE verifier,
+// stores the pending login, matches or creates the user, and issues the
+// session. The plugin only knows its provider's protocol — it builds the
+// authorization URL and, given the returned code, resolves it to a verified
+// external identity. Both calls are short interactive RPCs (a human is
+// mid-redirect); there is no polling flow in this kind.
+service LoginProvider {
+  rpc DescribeLoginProvider(DescribeLoginProviderRequest) returns (DescribeLoginProviderResponse);
+  rpc BeginLogin(BeginLoginRequest) returns (BeginLoginResponse);
+  rpc CompleteLogin(CompleteLoginRequest) returns (CompleteLoginResponse);
+}
+
+message DescribeLoginProviderRequest {}
+
+message DescribeLoginProviderResponse {
+  string name = 1;                        // machine name, e.g. "google"
+  string display_name = 2;                // sign-in button label, e.g. "Google"
+  string version = 3;
+  repeated ConfigField config_fields = 4; // tenant-level settings (client id/secret)
+  // Inline SVG for the sign-in button, rendered verbatim by the panel so no
+  // provider-specific UI code exists (the whitebox rule applied to buttons).
+  // Empty means the panel renders a plain branded button.
+  string icon_svg = 5;
+  string maturity = 6;                    // "dev" | "alpha" | "beta" | "stable"; empty = alpha (see gateway.proto)
+}
+
+// BeginLoginRequest carries everything the plugin needs to build the
+// provider's authorization URL. The agent minted state and the PKCE
+// challenge; plugins whose provider supports PKCE include it, others
+// ignore it.
+message BeginLoginRequest {
+  string tenant_id = 1;
+  string redirect_uri = 2;          // the agent's callback URL, registered with the provider
+  string state = 3;                 // opaque agent token; must ride the auth URL verbatim
+  string code_challenge = 4;        // PKCE S256 challenge, "" never happens today
+  map<string, string> config = 5;   // tenant login-provider settings
+}
+
+message BeginLoginResponse {
+  string auth_url = 1;              // where the agent redirects the browser
+}
+
+// CompleteLoginRequest resolves the authorization code the provider
+// redirected back with. The plugin exchanges it (server-to-server) and
+// fetches the external profile.
+message CompleteLoginRequest {
+  string tenant_id = 1;
+  string redirect_uri = 2;          // must match BeginLogin's, providers verify it
+  string code = 3;                  // authorization code from the callback
+  string code_verifier = 4;         // PKCE verifier matching BeginLogin's challenge
+  map<string, string> config = 5;
+}
+
+// CompleteLoginResponse is the resolved external identity. status is
+// "succeeded" or "failed" (strings as everywhere, §5); a transport error
+// means the exchange itself broke and the agent shows a generic failure.
+message CompleteLoginResponse {
+  string status = 1;                // "succeeded", "failed"
+  string failure_reason = 2;        // shown to the user on "failed"
+  string provider_user_id = 3;      // stable id at the provider, never the email
+  string email = 4;                 // may be "" when the provider hides it
+  // email_verified reports the provider's own claim. The agent only matches
+  // an existing local user by email when this is true — an unverified claim
+  // would let anyone register a victim's address at the provider and take
+  // over their panel account.
+  bool email_verified = 5;
+  string display_name = 6;
+  string avatar_url = 7;
+}

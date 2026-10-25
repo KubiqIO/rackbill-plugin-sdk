@@ -1,0 +1,195 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+import "plugin/proto/provisioner.proto";
+
+// Registrar is implemented by out-of-process domain registrar plugins. The
+// agent drives registrations, renewals, transfers, and nameserver changes
+// through a retrying job outbox; long-running operations (transfers, some
+// registries' registrations) follow the pending/poll pattern — return
+// "pending" plus an order_ref and the agent polls GetDomainStatus.
+service Registrar {
+  rpc DescribeRegistrar(DescribeRegistrarRequest) returns (DescribeRegistrarResponse);
+  rpc CheckAvailability(CheckAvailabilityRequest) returns (CheckAvailabilityResponse);
+  rpc RegisterDomain(RegisterDomainRequest) returns (DomainOpResponse);
+  rpc RenewDomain(RenewDomainRequest) returns (DomainOpResponse);
+  rpc TransferDomain(TransferDomainRequest) returns (DomainOpResponse);
+  rpc SetNameservers(SetNameserversRequest) returns (DomainOpResponse);
+  rpc GetDomainStatus(GetDomainStatusRequest) returns (DomainStatusResponse);
+  // TLD cost sheet (additive, gated by supports_tld_prices): what the
+  // provider charges the *operator* per TLD, standard tier only, for one
+  // year of each operation. Hosts must not call this unless the flag is
+  // set; plugins without the capability return UNIMPLEMENTED. The whole
+  // sheet must come back inside an interactive-ish budget (~90s) — a
+  // provider that can only price one TLD per round trip must not declare
+  // the flag.
+  rpc ListTLDPrices(ListTLDPricesRequest) returns (ListTLDPricesResponse);
+  // DNS zone hosting (additive, gated by supports_dns_hosting): the
+  // registrar serves a forward zone for a domain it holds. The agent keeps
+  // the record set and pushes all of it; the provider keeps its own SOA and
+  // apex NS records, which never travel. Plugins without the capability
+  // return UNIMPLEMENTED.
+  //
+  // ListZoneRecords reads what the provider serves now (found = false when
+  // there is no zone), used once to import a zone when hosting is switched
+  // on. PutZone creates the zone when absent and makes its records exactly
+  // the set sent. DeleteZone removes it; an absent zone is success.
+  rpc ListZoneRecords(ZoneRequest) returns (ListZoneRecordsResponse);
+  rpc PutZone(PutZoneRequest) returns (ZoneOpResponse);
+  rpc DeleteZone(ZoneRequest) returns (ZoneOpResponse);
+}
+
+message DescribeRegistrarRequest {}
+
+message DescribeRegistrarResponse {
+  string name = 1;                        // machine name, e.g. "namesilo"
+  string display_name = 2;
+  string version = 3;
+  repeated string tlds = 4;               // without dots: "com", "net", ...
+  bool supports_transfers = 5;
+  bool supports_dnssec = 6;
+  bool supports_whois_privacy = 7;
+  repeated ConfigField config_fields = 8; // product-level settings (tld, ...)
+  string maturity = 9;                    // "dev" | "alpha" | "beta" | "stable"; empty = alpha (see gateway.proto)
+  bool supports_tld_prices = 10;          // ListTLDPrices works
+  int32 max_registration_years = 12;     // initial registration limit; zero means one year
+  bool supports_dns_hosting = 11;         // ListZoneRecords, PutZone, DeleteZone work
+}
+
+message CheckAvailabilityRequest {
+  string tenant_id = 1;
+  string domain = 2;                // fqdn, e.g. "example.com"
+  map<string, string> config = 3;   // product registrar_config
+}
+
+message CheckAvailabilityResponse {
+  bool available = 1;
+  string reason = 2;                // "registered", "premium", "invalid", ... (display only)
+}
+
+// Contact fields travel as a string map (registrant name, email, address
+// keys are registrar-specific; the agent passes what it knows).
+message RegisterDomainRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string domain = 3;
+  int32 years = 4;
+  repeated string nameservers = 5;  // empty = registrar defaults
+  map<string, string> contact = 6;
+  map<string, string> config = 7;
+}
+
+message RenewDomainRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string domain = 3;
+  int32 years = 4;
+  int64 current_expires_unix = 5;   // what the agent believes; plugin returns the new value
+  map<string, string> config = 6;
+}
+
+message TransferDomainRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string domain = 3;
+  string auth_code = 4;
+  map<string, string> contact = 5;
+  map<string, string> config = 6;
+}
+
+message SetNameserversRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string domain = 3;
+  repeated string nameservers = 4;
+  map<string, string> config = 5;
+}
+
+// DomainOpResponse is shared by every mutating call. "pending" must carry an
+// order_ref the agent can poll GetDomainStatus with; "succeeded" should carry
+// expires_unix when the operation changes expiry.
+message DomainOpResponse {
+  string status = 1;                // "succeeded", "pending", "failed"
+  string order_ref = 2;
+  int64 expires_unix = 3;           // 0 = unchanged/unknown
+  string failure_reason = 4;
+}
+
+message GetDomainStatusRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string domain = 3;
+  string order_ref = 4;             // from the pending operation being polled
+  map<string, string> config = 5;
+}
+
+message DomainStatusResponse {
+  string status = 1;                // "active", "pending", "failed", "expired"
+  int64 expires_unix = 2;           // 0 = unknown
+  repeated string nameservers = 3;
+  string failure_reason = 4;
+}
+
+message ListTLDPricesRequest {
+  string tenant_id = 1;
+  // Registrar account settings — tenant-level, not product-level: the pull
+  // happens before any product for the TLD exists.
+  map<string, string> config = 2;
+}
+
+// One TLD's cost to the operator. A zero price means the provider does not
+// offer (or did not disclose) that operation for the TLD — never "free".
+message TLDPrice {
+  string tld = 1;                   // without dot; multi-label allowed ("co.uk")
+  string currency = 2;              // ISO 4217 code the provider bills in
+  int64 register_cents = 3;         // first-year registration, minor units
+  int64 renew_cents = 4;            // one-year renewal
+  int64 transfer_cents = 5;         // transfer-in (usually includes a year)
+}
+
+message ListTLDPricesResponse {
+  repeated TLDPrice prices = 1;
+}
+
+// One record in a hosted zone. name is relative to the zone with no
+// trailing dot; "" is the apex. Types: A, AAAA, CNAME, MX, TXT, SRV, CAA.
+// value is the record data without priority: an MX value is the host, an
+// SRV value is "weight port target", a CAA value is "flags tag value".
+message ZoneRecord {
+  string name = 1;
+  string type = 2;
+  string value = 3;
+  int32 ttl_seconds = 4;
+  int32 priority = 5;               // MX and SRV; 0 elsewhere
+}
+
+message ZoneRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string domain = 3;                // the zone: the registered domain, no trailing dot
+  map<string, string> config = 4;   // product registrar_config
+}
+
+message ListZoneRecordsResponse {
+  bool found = 1;
+  repeated ZoneRecord records = 2;  // SOA and apex NS left out
+}
+
+message PutZoneRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string domain = 3;
+  repeated ZoneRecord records = 4;  // the whole desired set
+  map<string, string> config = 5;
+}
+
+// ZoneOpResponse is shared by PutZone and DeleteZone. Zone operations never
+// pend: status is "succeeded" or "failed".
+message ZoneOpResponse {
+  string status = 1;
+  string failure_reason = 2;
+  repeated string nameservers = 3;  // PutZone: the hosts serving the zone, for the domain's NS
+}

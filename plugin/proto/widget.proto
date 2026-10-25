@@ -1,0 +1,127 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+// WidgetProvider is a cross-kind facility (§14b): any plugin binary may serve
+// it under the "widgets" dispense key alongside its kind service. The host
+// probes DescribeWidgets at load and treats UNIMPLEMENTED as "no widgets".
+// Payloads are typed generic shapes the panel renders with one themed
+// component per shape — never UI.
+service WidgetProvider {
+  rpc DescribeWidgets(DescribeWidgetsRequest) returns (DescribeWidgetsResponse);
+  rpc GetWidgetData(WidgetDataRequest) returns (WidgetDataResponse);
+}
+
+message DescribeWidgetsRequest {}
+
+message WidgetDescriptor {
+  string id = 1;          // machine id within the plugin, e.g. "balance"
+  string title = 2;
+  string description = 3;
+  // shape names the one payload field GetWidgetData fills:
+  // "stat" | "series" | "gauge" | "list" | "status" | "table".
+  string shape = 4;
+  // scope picks how the host resolves config: "tenant" (default; the
+  // plugin's tenant-level config, §15) or "node" (one call per registered
+  // node with node-scoped config; item shapes only, merged by the host).
+  string scope = 5;
+  string size = 6;           // suggested render size: "sm" | "md" | "lg"
+  int32 refresh_seconds = 7; // suggested cache TTL; 0 = host default
+}
+
+message DescribeWidgetsResponse {
+  repeated WidgetDescriptor widgets = 1;
+}
+
+message WidgetDataRequest {
+  string tenant_id = 1;
+  string widget_id = 2;
+  // Config is resolved by the host per the descriptor's scope; empty means
+  // fall back to the process environment, as everywhere.
+  map<string, string> config = 3;
+}
+
+message WidgetDataResponse {
+  string status = 1;         // "ok" | "failed"
+  string failure_reason = 2; // set when failed
+  WidgetData data = 3;
+}
+
+// WidgetData carries exactly one shape, matching the descriptor.
+message WidgetData {
+  WidgetStat stat = 1;
+  WidgetSeries series = 2;
+  repeated WidgetGauge gauges = 3;
+  repeated WidgetListItem items = 4;
+  repeated WidgetStatusItem statuses = 5;
+  WidgetTable table = 6;
+}
+
+// One labelled figure. Money is integer minor units + ISO currency
+// (amount_cents is only read when currency is non-empty); quantities are
+// doubles with a unit hint ("count", "bytes", "percent", or a free suffix).
+message WidgetStatValue {
+  string label = 1;
+  double value = 2;
+  int64 amount_cents = 3;
+  string currency = 4;
+  string unit = 5;
+  double delta_pct = 6; // change vs the previous period; 0 = not reported
+  // Optional panel-relative path the figure links to ("/admin/tickets?status=open").
+  // The panel renders only root-relative paths as links and ignores the rest.
+  string href = 7;
+}
+
+message WidgetStat {
+  // First value renders as the hero figure, the rest as secondary rows.
+  repeated WidgetStatValue values = 1;
+  repeated WidgetSeriesPoint spark = 2; // optional sparkline
+}
+
+message WidgetSeriesPoint {
+  int64 ts = 1;     // unix seconds
+  double value = 2;
+}
+
+message WidgetSeriesLine {
+  string label = 1;
+  repeated WidgetSeriesPoint points = 2;
+}
+
+message WidgetSeries {
+  repeated WidgetSeriesLine lines = 1;
+  string unit = 2; // "count", "bytes", "money:<ISO>" (values then in minor units)
+  string kind = 3; // render hint: "line" | "bar" | "area"
+}
+
+message WidgetGauge {
+  string label = 1;
+  double used = 2;
+  double limit = 3; // 0 = unlimited/unknown — render used only
+  string unit = 4;
+  string detail = 5;
+}
+
+message WidgetListItem {
+  string title = 1;
+  string subtitle = 2;
+  string status = 3; // optional badge text, e.g. "failed", "open"
+  int64 ts = 4;      // unix seconds; 0 = no timestamp
+}
+
+message WidgetStatusItem {
+  string label = 1;
+  string status = 2; // "ok" | "warn" | "error" | "unknown"
+  string detail = 3;
+}
+
+message WidgetTable {
+  repeated string columns = 1;
+  repeated WidgetTableRow rows = 2;
+}
+
+message WidgetTableRow {
+  repeated string cells = 1;
+}

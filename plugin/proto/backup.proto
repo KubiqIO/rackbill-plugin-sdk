@@ -1,0 +1,199 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+import "plugin/proto/provisioner.proto";
+
+// BackupProvider is implemented by out-of-process plugins that own a backup
+// *repository* — a Proxmox Backup Server datastore, a restic repo on S3, an
+// NFS or SMB export. The agent never reads or writes a backup blob: it owns
+// the quota policy, the schedules, the inventory metadata and the billing,
+// and the plugin owns the bytes. That split is what lets a repository live in
+// a different datacenter from the panel (an RB_WEB=false worker agent runs
+// the plugin next to the storage) without the control plane needing a mount.
+//
+// Two ways a snapshot gets created:
+//
+//   1. Through the *provisioner's* backup capability — the hypervisor knows
+//      how to snapshot its own guest (Proxmox vzdump writing into a PBS
+//      datastore). The agent brokers: it asks this plugin for a target with
+//      PrepareTarget, then hands that target to the provisioner.
+//   2. Directly by this plugin, when it declares supports_direct_backup —
+//      for services with no backup-capable provisioner (a file store the
+//      customer uploads to, an agent-side restic run).
+//
+// Either way the repository plugin remains the authority on what exists
+// (ListSnapshots), what it costs in space (GetUsage) and what gets pruned
+// (DeleteSnapshot) — one inventory, one rotation engine, one usage figure.
+service BackupProvider {
+  rpc DescribeBackupProvider(DescribeBackupProviderRequest) returns (DescribeBackupProviderResponse);
+
+  // Namespace lifecycle. PrepareTarget is idempotent: it creates the
+  // per-service namespace if absent and always returns how to write to it.
+  rpc PrepareTarget(PrepareTargetRequest) returns (PrepareTargetResponse);
+  rpc ReleaseTarget(ReleaseTargetRequest) returns (BackupActionResponse);
+
+  // Inventory and accounting.
+  rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
+  rpc DeleteSnapshot(DeleteSnapshotRequest) returns (BackupActionResponse);
+  rpc GetUsage(GetUsageRequest) returns (GetUsageResponse);
+
+  // Hard quota, gated by supports_quota. Where a backend can enforce a limit
+  // itself, the agent pushes the sold quota down so a runaway job cannot
+  // overrun the operator's storage between usage polls.
+  rpc SetQuota(SetQuotaRequest) returns (BackupActionResponse);
+
+  // Direct backup, gated by supports_direct_backup.
+  rpc CreateSnapshot(CreateSnapshotRequest) returns (BackupOperationResponse);
+  // Restore, gated by supports_restore. Providers that can only restore
+  // through the provisioner leave this unimplemented.
+  rpc RestoreSnapshot(RestoreSnapshotRequest) returns (BackupOperationResponse);
+
+  // Poll for a pending CreateSnapshot/RestoreSnapshot. Backup jobs run for
+  // minutes to hours, so mutating calls may return "pending" with a job_ref
+  // rather than holding an RPC open (the registrar pending/poll pattern).
+  rpc GetBackupJob(GetBackupJobRequest) returns (BackupOperationResponse);
+}
+
+message DescribeBackupProviderRequest {}
+
+message DescribeBackupProviderResponse {
+  string name = 1;                        // machine name, e.g. "pbs"
+  string display_name = 2;
+  string version = 3;
+  // Repository-level settings (endpoint, datastore, credentials), rendered by
+  // the admin storage editor. Config is per repository, not per tenant: one
+  // operator may run several unrelated backup targets.
+  repeated ConfigField config_fields = 4;
+
+  bool supports_quota = 5;          // SetQuota enforces server-side
+  bool supports_direct_backup = 6;  // CreateSnapshot without a provisioner
+  bool supports_restore = 7;        // RestoreSnapshot
+  // Whether the backend deduplicates across snapshots. Informs the rotation
+  // manager's space projection: on a deduplicating store, keeping ten dailies
+  // costs far less than ten times one snapshot.
+  bool deduplicates = 8;
+  string maturity = 9;              // "dev" | "alpha" | "beta" | "stable"; empty = alpha (see gateway.proto)
+}
+
+// BackupTarget and BackupOperationResponse are defined in provisioner.proto:
+// both contracts speak them, and the import already runs this way.
+
+message PrepareTargetRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;            // provisioner ref, when the service has one
+  map<string, string> config = 4;     // repository config
+  // Quota the agent has sold for this service; a provider declaring
+  // supports_quota should apply it here so the namespace is born bounded.
+  int64 quota_bytes = 5;
+  int32 quota_snapshots = 6;
+}
+
+message PrepareTargetResponse {
+  string status = 1;                  // "succeeded", "failed"
+  string failure_reason = 2;
+  BackupTarget target = 3;
+}
+
+message ReleaseTargetRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  map<string, string> config = 3;
+  BackupTarget target = 4;
+  // Termination deletes the customer's data; cancellation may keep it for a
+  // retention window. The agent decides which, the plugin obeys.
+  bool purge = 5;
+}
+
+message BackupActionResponse {
+  string status = 1;                  // "succeeded", "failed"
+  string failure_reason = 2;
+}
+
+// Snapshot is one restorable point in time. size_bytes is what this snapshot
+// costs in the repository *as the backend accounts for it* — on a
+// deduplicating store that is the referenced size, and the sum across
+// snapshots will exceed GetUsage's used_bytes. Billing always uses GetUsage.
+message Snapshot {
+  string snapshot_id = 1;
+  int64 created_unix = 2;
+  int64 size_bytes = 3;
+  string label = 4;                   // "scheduled", "manual", plugin-defined
+  bool protected = 5;                 // pinned upstream; rotation must skip it
+  bool verified = 6;                  // backend verified integrity
+  map<string, string> details = 7;    // shown verbatim in the panel
+}
+
+message ListSnapshotsRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+  BackupTarget target = 3;
+}
+
+message ListSnapshotsResponse {
+  repeated Snapshot snapshots = 1;
+}
+
+message DeleteSnapshotRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+  BackupTarget target = 3;
+  string snapshot_id = 4;
+}
+
+message GetUsageRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+  // An empty target asks for the whole repository — how the admin storage
+  // page shows capacity headroom across every customer on a location.
+  BackupTarget target = 3;
+}
+
+message GetUsageResponse {
+  int64 used_bytes = 1;
+  int32 snapshot_count = 2;
+  // Repository capacity when the backend knows it (datastore size, quota on
+  // the export). 0 = unknown, and the agent falls back to the capacity the
+  // operator declared on the storage location.
+  int64 capacity_bytes = 3;
+  // Logical bytes before deduplication/compression, when known. The rotation
+  // manager derives an observed dedup factor from used_bytes/logical_bytes.
+  int64 logical_bytes = 4;
+}
+
+message SetQuotaRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+  BackupTarget target = 3;
+  int64 quota_bytes = 4;              // 0 = unlimited
+  int32 quota_snapshots = 5;          // 0 = unlimited
+}
+
+message CreateSnapshotRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;
+  map<string, string> config = 4;
+  BackupTarget target = 5;
+  string label = 6;                   // "scheduled" or "manual"
+  map<string, string> options = 7;    // compression, mode, ...
+}
+
+message RestoreSnapshotRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;
+  map<string, string> config = 4;
+  BackupTarget target = 5;
+  string snapshot_id = 6;
+  map<string, string> options = 7;
+}
+
+message GetBackupJobRequest {
+  string tenant_id = 1;
+  map<string, string> config = 2;
+  string job_ref = 3;
+}

@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+import "plugin/proto/provisioner.proto";
+
+// FraudScreen is implemented by out-of-process order-scoring plugins
+// (MaxMind, FraudRecord, ...). Unlike every other kind it is called
+// synchronously during checkout with a hard 5-second budget, and the host
+// FAILS OPEN: a timeout or transport error is treated as a "review" verdict,
+// never a blocked checkout — a scoring vendor outage must not stop sales.
+service FraudScreen {
+  rpc DescribeFraudScreen(DescribeFraudScreenRequest) returns (DescribeFraudScreenResponse);
+  rpc Score(ScoreRequest) returns (ScoreResponse);
+}
+
+message DescribeFraudScreenRequest {}
+
+message DescribeFraudScreenResponse {
+  string name = 1;                        // machine name, e.g. "maxmind"
+  string display_name = 2;
+  string version = 3;
+  repeated ConfigField config_fields = 4; // tenant-level settings (API key, thresholds)
+  string maturity = 5;                    // "dev" | "alpha" | "beta" | "stable"; empty = alpha (see gateway.proto)
+}
+
+// ScoreRequest is the order context at checkout. Fields the agent cannot
+// know are zero values; plugins score with what they get.
+message ScoreRequest {
+  string tenant_id = 1;
+  string account_id = 2;
+  string email = 3;                 // acting user's login email
+  string ip = 4;                    // order request's remote address
+  string country = 5;               // account billing country
+  string region = 6;
+  string product_name = 7;
+  int64 amount_cents = 8;           // first-invoice total before tax
+  string currency = 9;
+  string domain = 10;               // fqdn for domain orders, "" otherwise
+  int32 account_age_days = 11;
+  map<string, string> config = 12;  // tenant fraud settings
+}
+
+// Verdict mapping is the plugin's job (its config fields can carry
+// thresholds); the host only routes on the verdict string.
+message ScoreResponse {
+  int32 score = 1;                  // 0 (clean) - 100 (certain fraud)
+  string verdict = 2;               // "allow", "review", "deny"
+  repeated string reasons = 3;      // display-only, shown to admins
+}

@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+import "plugin/proto/provisioner.proto";
+
+// UsageSource is implemented by out-of-process metered-billing plugins. The
+// agent's scheduler pulls consumption at cycle close with Collect; records
+// land in the usage ledger and price out through the product's meters.
+// Pull, not push — plugins never need inbound connectivity to the agent.
+service UsageSource {
+  rpc DescribeUsageSource(DescribeUsageSourceRequest) returns (DescribeUsageSourceResponse);
+  rpc Collect(CollectRequest) returns (CollectResponse);
+}
+
+message DescribeUsageSourceRequest {}
+
+// MetricDescriptor advertises one metric the source can report, so the admin
+// meter editor can offer known metric names and units.
+message MetricDescriptor {
+  string metric = 1;      // machine name, e.g. "bandwidth"
+  string unit = 2;        // human unit the quantity is denominated in, e.g. "GB"
+  string description = 3;
+}
+
+message DescribeUsageSourceResponse {
+  string name = 1;                        // machine name, e.g. "dev-usage"
+  string display_name = 2;
+  string version = 3;
+  repeated ConfigField config_fields = 4; // product-level settings (shared shape with provisioners)
+  repeated MetricDescriptor metrics = 5;
+  string maturity = 6;                    // "dev" | "alpha" | "beta" | "stable"; empty = alpha (see gateway.proto)
+}
+
+// CollectRequest asks for consumption over [window_start, window_end).
+// Windows never overlap for a service: the host advances the cursor to the
+// previous window_end, and records are keyed uniquely per
+// (service, metric, window_start) so retried collections cannot double-count.
+message CollectRequest {
+  string tenant_id = 1;
+  string service_id = 2;
+  string external_ref = 3;          // provisioner ref when the product has one; "" otherwise
+  map<string, string> config = 4;   // product usage_config
+  int64 window_start_unix = 5;
+  int64 window_end_unix = 6;
+}
+
+// UsageRecord is consumption of one metric during the requested window.
+// Quantity is what was *consumed in the window* (integrate gauges upstream:
+// bytes transferred, GiB-hours of RAM, request count), never an instantaneous
+// reading. Measurement is a double; money stays integer — the host converts
+// overage to whole billable units before pricing.
+message UsageRecord {
+  string metric = 1;
+  double quantity = 2;
+  string unit = 3;
+}
+
+// A collection failure is a gRPC error, not a status field: the host logs it,
+// skips the window, and retries the whole span at the next cycle — billing is
+// never blocked on a usage source.
+message CollectResponse {
+  repeated UsageRecord records = 1;
+}

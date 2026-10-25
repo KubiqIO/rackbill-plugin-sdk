@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+
+import "plugin/proto/provisioner.proto";
+
+// Notifier is implemented by out-of-process delivery plugins (SMTP, Postmark,
+// SMS gateways). The agent owns templating and the message log — Send always
+// receives fully rendered content; the plugin owns nothing but delivery.
+service Notifier {
+  rpc DescribeNotifier(DescribeNotifierRequest) returns (DescribeNotifierResponse);
+  rpc Send(SendRequest) returns (SendResponse);
+
+  // Config enumeration (§7.1's mechanism on the notifier contract, decision
+  // 69): list the valid values for one config field — or a reserved key like
+  // "channels"/"roles" (decision 64) — so the panel offers dropdowns of real
+  // guilds, channels, and roles instead of free-text ids. Plugins without
+  // the capability return UNIMPLEMENTED.
+  rpc ListConfigOptions(ListConfigOptionsRequest) returns (ListConfigOptionsResponse);
+
+  // Member-roles capability (additive, gated by supports_member_roles): for
+  // chat platforms whose paid subscribers earn roles. The agent computes the
+  // desired role set; the plugin only reads one member and applies role
+  // adds/removes. Hosts must not call these unless the flag is set; plugins
+  // without the capability return UNIMPLEMENTED.
+  rpc GetChatMember(GetChatMemberRequest) returns (GetChatMemberResponse);
+  rpc ModifyChatMemberRoles(ModifyChatMemberRolesRequest) returns (ModifyChatMemberRolesResponse);
+}
+
+message DescribeNotifierRequest {}
+
+message DescribeNotifierResponse {
+  string name = 1;                        // machine name, e.g. "smtp"
+  string display_name = 2;
+  string version = 3;
+  repeated string channels = 4;           // "email", "sms", "chat", ...
+  repeated ConfigField config_fields = 5; // tenant-level settings (relay host, credentials, ...)
+  // Member-roles capability flag: GetChatMember / ModifyChatMemberRoles work.
+  bool supports_member_roles = 6;
+  // The login-provider machine name whose provider_user_id values are this
+  // chat platform's user ids ("discord" — the login-discord identity link is
+  // how the agent knows a customer's chat identity). Empty when the notifier
+  // has no identity story (mail, sms).
+  string identity_provider = 7;
+  string maturity = 8;                    // "dev" | "alpha" | "beta" | "stable"; empty = alpha (see gateway.proto)
+}
+
+// GetChatMemberRequest reads one member of the configured chat server.
+// user_id is the platform's own user id (a user_identities.provider_user_id
+// matched through identity_provider); config is the tenant's chat integration
+// config, carrying the credential and the server/guild id.
+message GetChatMemberRequest {
+  string tenant_id = 1;
+  string user_id = 2;
+  map<string, string> config = 3;
+}
+
+message GetChatMemberResponse {
+  bool found = 1;                   // false = not a member of the server; not an error
+  repeated string role_ids = 2;     // the member's current role ids
+  string display_name = 3;          // best display label the platform offers
+}
+
+// ModifyChatMemberRolesRequest applies role changes to one member. Both lists
+// may be empty (a no-op the host normally avoids sending).
+message ModifyChatMemberRolesRequest {
+  string tenant_id = 1;
+  string user_id = 2;
+  repeated string add_role_ids = 3;
+  repeated string remove_role_ids = 4;
+  map<string, string> config = 5;
+}
+
+message ModifyChatMemberRolesResponse {
+  string status = 1;                // "succeeded", "failed"
+  string failure_reason = 2;
+}
+
+// SendRequest delivers one rendered message. config is the tenant's notifier
+// configuration (their own relay credentials — tenant-hosted delivery is the
+// point), passed on every call; plugins stay stateless.
+message SendRequest {
+  string tenant_id = 1;
+  string channel = 2;              // one of the declared channels
+  string to = 3;                   // address in the channel's format
+  string subject = 4;              // empty for channels without subjects (sms)
+  string body = 5;                 // plain text, fully rendered
+  map<string, string> config = 6;
+  string html_body = 7;            // optional branded HTML alternative; email only
+}
+
+message SendResponse {
+  string status = 1;               // "sent", "failed"
+  string provider_id = 2;          // remote message id when the provider returns one
+  string failure_reason = 3;
+}
