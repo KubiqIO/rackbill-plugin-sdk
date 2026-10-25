@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"kubiq.io/rackbill/sdk/plugin/proto"
+	"rackbill.com/sdk/plugin/proto"
 )
 
 // NotifierPluginName is the key notifiers are served and dispensed under.

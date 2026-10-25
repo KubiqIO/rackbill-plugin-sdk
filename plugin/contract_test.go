@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	_ "kubiq.io/rackbill/sdk/plugin/proto"
+	_ "rackbill.com/sdk/plugin/proto"
 )
 
 // pinnedContractSurface is the fingerprint of the contract surface at

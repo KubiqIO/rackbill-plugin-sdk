@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	sdk "kubiq.io/rackbill/sdk/plugin"
+	sdk "rackbill.com/sdk/plugin"
 )
 
 // GameServerManager is optional. Enable SupportsGameServer only after replacing

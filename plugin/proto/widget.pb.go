@@ -1098,7 +1098,7 @@ const file_plugin_proto_widget_proto_rawDesc = "" +
 	"\x05cells\x18\x01 \x03(\tR\x05cells2\xdc\x01\n" +
 	"\x0eWidgetProvider\x12j\n" +
 	"\x0fDescribeWidgets\x12*.rackbill.plugin.v1.DescribeWidgetsRequest\x1a+.rackbill.plugin.v1.DescribeWidgetsResponse\x12^\n" +
-	"\rGetWidgetData\x12%.rackbill.plugin.v1.WidgetDataRequest\x1a&.rackbill.plugin.v1.WidgetDataResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\rGetWidgetData\x12%.rackbill.plugin.v1.WidgetDataRequest\x1a&.rackbill.plugin.v1.WidgetDataResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_widget_proto_rawDescOnce sync.Once

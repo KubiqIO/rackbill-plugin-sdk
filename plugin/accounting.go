@@ -9,8 +9,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"kubiq.io/rackbill/sdk/money"
-	"kubiq.io/rackbill/sdk/plugin/proto"
+	"rackbill.com/sdk/money"
+	"rackbill.com/sdk/plugin/proto"
 )
 
 // AccountingPluginName is the key accounting providers are served and

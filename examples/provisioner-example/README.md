@@ -119,13 +119,13 @@ mkdir ../provisioner-acme
 cp examples/provisioner-example/*.go ../provisioner-acme/
 cd ../provisioner-acme
 go mod init example.com/provisioner-acme
-go get kubiq.io/rackbill/sdk@v0.1.0
+go get rackbill.com/sdk@v0.2.0
 go mod tidy
 ```
 
 Choose an available tag from the
 [SDK releases](https://github.com/KubiqIO/rackbill-plugin-sdk/releases) that
-supports your oldest target agent; `v0.1.0` is the initial-version example.
+supports your oldest target agent; the command targets SDK `v0.2.0` once available.
 Only the public SDK and its dependencies are needed.
 
 Rename the implementation, set `Name` to `"acme"`, update `DisplayName`, plugin

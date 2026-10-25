@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"kubiq.io/rackbill/sdk/plugin/proto"
+	"rackbill.com/sdk/plugin/proto"
 )
 
 // RegistrarPluginName is the key registrars are served and dispensed under.

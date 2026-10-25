@@ -365,7 +365,7 @@ const file_plugin_proto_fraud_proto_rawDesc = "" +
 	"\areasons\x18\x03 \x03(\tR\areasons2\xd3\x01\n" +
 	"\vFraudScreen\x12v\n" +
 	"\x13DescribeFraudScreen\x12..rackbill.plugin.v1.DescribeFraudScreenRequest\x1a/.rackbill.plugin.v1.DescribeFraudScreenResponse\x12L\n" +
-	"\x05Score\x12 .rackbill.plugin.v1.ScoreRequest\x1a!.rackbill.plugin.v1.ScoreResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\x05Score\x12 .rackbill.plugin.v1.ScoreRequest\x1a!.rackbill.plugin.v1.ScoreResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_fraud_proto_rawDescOnce sync.Once

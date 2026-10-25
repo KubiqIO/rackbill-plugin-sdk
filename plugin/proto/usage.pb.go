@@ -439,7 +439,7 @@ const file_plugin_proto_usage_proto_rawDesc = "" +
 	"\arecords\x18\x01 \x03(\v2\x1f.rackbill.plugin.v1.UsageRecordR\arecords2\xd9\x01\n" +
 	"\vUsageSource\x12v\n" +
 	"\x13DescribeUsageSource\x12..rackbill.plugin.v1.DescribeUsageSourceRequest\x1a/.rackbill.plugin.v1.DescribeUsageSourceResponse\x12R\n" +
-	"\aCollect\x12\".rackbill.plugin.v1.CollectRequest\x1a#.rackbill.plugin.v1.CollectResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\aCollect\x12\".rackbill.plugin.v1.CollectRequest\x1a#.rackbill.plugin.v1.CollectResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_usage_proto_rawDescOnce sync.Once

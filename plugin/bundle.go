@@ -10,7 +10,7 @@ import (
 	goplugin "github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 
-	"kubiq.io/rackbill/sdk/plugin/proto"
+	"rackbill.com/sdk/plugin/proto"
 )
 
 // Bundling: one binary, several kinds (plugin architecture §3, decision 118).

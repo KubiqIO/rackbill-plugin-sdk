@@ -1244,7 +1244,7 @@ const file_plugin_proto_accounting_proto_rawDesc = "" +
 	"\vSyncPayment\x12&.rackbill.plugin.v1.SyncPaymentRequest\x1a*.rackbill.plugin.v1.AccountingSyncResponse\x12_\n" +
 	"\n" +
 	"SyncRefund\x12%.rackbill.plugin.v1.SyncRefundRequest\x1a*.rackbill.plugin.v1.AccountingSyncResponse\x12p\n" +
-	"\x11ListConfigOptions\x12,.rackbill.plugin.v1.ListConfigOptionsRequest\x1a-.rackbill.plugin.v1.ListConfigOptionsResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\x11ListConfigOptions\x12,.rackbill.plugin.v1.ListConfigOptionsRequest\x1a-.rackbill.plugin.v1.ListConfigOptionsResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_accounting_proto_rawDescOnce sync.Once

@@ -6,7 +6,7 @@ import (
 	goplugin "github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 
-	"kubiq.io/rackbill/sdk/plugin/proto"
+	"rackbill.com/sdk/plugin/proto"
 )
 
 // DNSPluginName is the key DNS providers are served and dispensed under.

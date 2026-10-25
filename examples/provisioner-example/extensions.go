@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	sdk "kubiq.io/rackbill/sdk/plugin"
+	sdk "rackbill.com/sdk/plugin"
 )
 
 // These interfaces are optional additions to sdk.Provisioner. Keep their

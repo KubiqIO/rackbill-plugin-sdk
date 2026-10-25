@@ -35,13 +35,13 @@ mkdir ../notifier-acme
 cp examples/notifier-example/main.go ../notifier-acme/main.go
 cd ../notifier-acme
 go mod init example.com/notifier-acme
-go get kubiq.io/rackbill/sdk@v0.1.0
+go get rackbill.com/sdk@v0.2.0
 go mod tidy
 ```
 
 Choose an SDK tag from the [published releases](https://github.com/KubiqIO/rackbill-plugin-sdk/releases)
-that supports the oldest RackBill agent you target. The command uses the initial
-SDK version as an example; installation requires that release to be available.
+that supports the oldest RackBill agent you target. The command targets SDK
+`v0.2.0`; installation requires that release to be available.
 The SDK and its public dependencies are sufficient; no RackBill source checkout
 is needed.
 

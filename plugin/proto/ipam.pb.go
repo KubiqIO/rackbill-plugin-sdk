@@ -1045,7 +1045,7 @@ const file_plugin_proto_ipam_proto_rawDesc = "" +
 	"\x11ListIPAMAddresses\x12,.rackbill.plugin.v1.ListIPAMAddressesRequest\x1a-.rackbill.plugin.v1.ListIPAMAddressesResponse\x12n\n" +
 	"\x13AllocateIPAMAddress\x12..rackbill.plugin.v1.AllocateIPAMAddressRequest\x1a'.rackbill.plugin.v1.IPAMAddressResponse\x12j\n" +
 	"\x11UpdateIPAMAddress\x12,.rackbill.plugin.v1.UpdateIPAMAddressRequest\x1a'.rackbill.plugin.v1.IPAMAddressResponse\x12l\n" +
-	"\x12ReleaseIPAMAddress\x12-.rackbill.plugin.v1.ReleaseIPAMAddressRequest\x1a'.rackbill.plugin.v1.IPAMReleaseResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\x12ReleaseIPAMAddress\x12-.rackbill.plugin.v1.ReleaseIPAMAddressRequest\x1a'.rackbill.plugin.v1.IPAMReleaseResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_ipam_proto_rawDescOnce sync.Once

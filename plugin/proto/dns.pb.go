@@ -418,7 +418,7 @@ const file_plugin_proto_dns_proto_rawDesc = "" +
 	"\vDNSProvider\x12v\n" +
 	"\x13DescribeDNSProvider\x12..rackbill.plugin.v1.DescribeDNSProviderRequest\x1a/.rackbill.plugin.v1.DescribeDNSProviderResponse\x12^\n" +
 	"\fUpsertRecord\x12'.rackbill.plugin.v1.UpsertRecordRequest\x1a%.rackbill.plugin.v1.DNSRecordResponse\x12^\n" +
-	"\fDeleteRecord\x12'.rackbill.plugin.v1.DeleteRecordRequest\x1a%.rackbill.plugin.v1.DNSRecordResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\fDeleteRecord\x12'.rackbill.plugin.v1.DeleteRecordRequest\x1a%.rackbill.plugin.v1.DNSRecordResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_dns_proto_rawDescOnce sync.Once

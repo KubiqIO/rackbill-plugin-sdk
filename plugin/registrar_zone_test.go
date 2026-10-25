@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
-	"kubiq.io/rackbill/sdk/plugin/proto"
+	"rackbill.com/sdk/plugin/proto"
 )
 
 // zoneRegistrar implements the contract 12 zone calls and records what arrived.

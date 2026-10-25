@@ -1,4 +1,4 @@
-module kubiq.io/rackbill/sdk
+module rackbill.com/sdk
 
 go 1.26.10
 

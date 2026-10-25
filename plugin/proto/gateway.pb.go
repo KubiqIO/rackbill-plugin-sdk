@@ -824,7 +824,7 @@ const file_plugin_proto_gateway_proto_rawDesc = "" +
 	"\x06Charge\x12!.rackbill.plugin.v1.ChargeRequest\x1a\".rackbill.plugin.v1.ChargeResponse\x12O\n" +
 	"\x06Refund\x12!.rackbill.plugin.v1.RefundRequest\x1a\".rackbill.plugin.v1.RefundResponse\x12^\n" +
 	"\vCheckCharge\x12&.rackbill.plugin.v1.CheckChargeRequest\x1a'.rackbill.plugin.v1.CheckChargeResponse\x12Y\n" +
-	"\vCheckRefund\x12&.rackbill.plugin.v1.CheckRefundRequest\x1a\".rackbill.plugin.v1.RefundResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\vCheckRefund\x12&.rackbill.plugin.v1.CheckRefundRequest\x1a\".rackbill.plugin.v1.RefundResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_gateway_proto_rawDescOnce sync.Once

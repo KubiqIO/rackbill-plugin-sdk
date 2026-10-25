@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	sdk "kubiq.io/rackbill/sdk/plugin"
+	sdk "rackbill.com/sdk/plugin"
 )
 
 // Each optional interface has its own capability flag. Keeping the methods in

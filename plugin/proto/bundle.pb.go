@@ -115,7 +115,7 @@ const file_plugin_proto_bundle_proto_rawDesc = "" +
 	"\x16DescribeBundleResponse\x12\x14\n" +
 	"\x05kinds\x18\x01 \x03(\tR\x05kinds2q\n" +
 	"\x06Bundle\x12g\n" +
-	"\x0eDescribeBundle\x12).rackbill.plugin.v1.DescribeBundleRequest\x1a*.rackbill.plugin.v1.DescribeBundleResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\x0eDescribeBundle\x12).rackbill.plugin.v1.DescribeBundleRequest\x1a*.rackbill.plugin.v1.DescribeBundleResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_bundle_proto_rawDescOnce sync.Once

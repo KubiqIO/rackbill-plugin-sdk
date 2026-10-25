@@ -1130,7 +1130,7 @@ const file_plugin_proto_oob_proto_rawDesc = "" +
 	"\x0eMintOOBConsole\x12).rackbill.plugin.v1.MintOOBConsoleRequest\x1a&.rackbill.plugin.v1.OOBConsoleResponse\x12^\n" +
 	"\x0eReadOOBSensors\x12$.rackbill.plugin.v1.OOBDeviceRequest\x1a&.rackbill.plugin.v1.OOBSensorsResponse\x12b\n" +
 	"\x0fReadOOBEventLog\x12&.rackbill.plugin.v1.OOBEventLogRequest\x1a'.rackbill.plugin.v1.OOBEventLogResponse\x12h\n" +
-	"\x11DescribeOOBDevice\x12$.rackbill.plugin.v1.OOBDeviceRequest\x1a-.rackbill.plugin.v1.DescribeOOBDeviceResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\x11DescribeOOBDevice\x12$.rackbill.plugin.v1.OOBDeviceRequest\x1a-.rackbill.plugin.v1.DescribeOOBDeviceResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_oob_proto_rawDescOnce sync.Once

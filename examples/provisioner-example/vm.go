@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	sdk "kubiq.io/rackbill/sdk/plugin"
+	sdk "rackbill.com/sdk/plugin"
 )
 
 // These assertions keep the optional VM method signatures checked against the

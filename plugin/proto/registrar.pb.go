@@ -1529,7 +1529,7 @@ const file_plugin_proto_registrar_proto_rawDesc = "" +
 	"\x0fListZoneRecords\x12\x1f.rackbill.plugin.v1.ZoneRequest\x1a+.rackbill.plugin.v1.ListZoneRecordsResponse\x12Q\n" +
 	"\aPutZone\x12\".rackbill.plugin.v1.PutZoneRequest\x1a\".rackbill.plugin.v1.ZoneOpResponse\x12Q\n" +
 	"\n" +
-	"DeleteZone\x12\x1f.rackbill.plugin.v1.ZoneRequest\x1a\".rackbill.plugin.v1.ZoneOpResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"DeleteZone\x12\x1f.rackbill.plugin.v1.ZoneRequest\x1a\".rackbill.plugin.v1.ZoneOpResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_registrar_proto_rawDescOnce sync.Once

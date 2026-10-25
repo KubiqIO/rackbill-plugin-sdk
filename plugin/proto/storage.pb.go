@@ -687,7 +687,7 @@ const file_plugin_proto_storage_proto_rawDesc = "" +
 	"\x03Put\x12%.rackbill.plugin.v1.StoragePutRequest\x1a .rackbill.plugin.v1.StorageEmpty\x12T\n" +
 	"\x03Get\x12%.rackbill.plugin.v1.StorageKeyRequest\x1a&.rackbill.plugin.v1.StorageGetResponse\x12Q\n" +
 	"\x06Delete\x12%.rackbill.plugin.v1.StorageKeyRequest\x1a .rackbill.plugin.v1.StorageEmpty\x12W\n" +
-	"\x04List\x12&.rackbill.plugin.v1.StorageListRequest\x1a'.rackbill.plugin.v1.StorageListResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\x04List\x12&.rackbill.plugin.v1.StorageListRequest\x1a'.rackbill.plugin.v1.StorageListResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_storage_proto_rawDescOnce sync.Once

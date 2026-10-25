@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	sdk "kubiq.io/rackbill/sdk/plugin"
+	sdk "rackbill.com/sdk/plugin"
 )
 
 // The SDK may call one instance concurrently for different tenants. Keep their

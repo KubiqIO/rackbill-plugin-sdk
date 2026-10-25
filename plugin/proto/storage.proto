@@ -1,6 +1,6 @@
 syntax = "proto3";
 package rackbill.plugin.v1;
-option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+option go_package = "rackbill.com/sdk/plugin/proto;proto";
 
 // Optional cross-kind service, dispense key "storage". The host creates the
 // schema before connecting its reverse StorageData service through GRPCBroker.

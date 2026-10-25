@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 
-	sdk "kubiq.io/rackbill/sdk/plugin"
+	sdk "rackbill.com/sdk/plugin"
 )
 
 // One instance can serve concurrent calls for multiple tenants. Keep request

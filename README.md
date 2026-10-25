@@ -1,13 +1,13 @@
 # RackBill plugin SDK
 
-`kubiq.io/rackbill/sdk` is the standalone Go module for writing RackBill
+`rackbill.com/sdk` is the standalone Go module for writing RackBill
 plugins: payment gateways, provisioners, registrars, DNS providers, usage
 sources, fraud screens, notifiers, backup repositories, accounting exports,
 login providers, out-of-band consoles, and upstream IPAM providers. It contains no agent code — just the public interfaces,
 the proto contract, and the `Serve*` entry points.
 
 ```go
-import sdk "kubiq.io/rackbill/sdk/plugin"
+import sdk "rackbill.com/sdk/plugin"
 
 func main() { sdk.ServeGateway(myGateway{}) }
 ```
@@ -42,17 +42,16 @@ Choose a tag from its
 [releases](https://github.com/KubiqIO/rackbill-plugin-sdk/releases), read the release
 notes for compatibility and migration guidance, and pin that version.
 
-If no releases are listed yet, the first SDK release is still pending. The
-following command uses the initial release version as an example:
+Install SDK `v0.2.0`:
 
 ```sh
-go get kubiq.io/rackbill/sdk@v0.1.0
+go get rackbill.com/sdk@v0.2.0
 ```
 
 SDK versions change when the SDK changes and follow their own release sequence.
 An SDK version does not identify a RackBill application or first-party plugin
-release. The initial SDK release is `v0.1.0`; during the `v0` series, read the
-release notes before upgrading because the API may change.
+release. During the `v0` series, read the release notes before upgrading because
+the API may change.
 
 `sdk.ContractVersion` is a separate compatibility number. It records the plugin
 contract required by a compiled plugin; an SDK patch or documentation update need

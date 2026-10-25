@@ -492,7 +492,7 @@ const file_plugin_proto_login_proto_rawDesc = "" +
 	"\x15DescribeLoginProvider\x120.rackbill.plugin.v1.DescribeLoginProviderRequest\x1a1.rackbill.plugin.v1.DescribeLoginProviderResponse\x12[\n" +
 	"\n" +
 	"BeginLogin\x12%.rackbill.plugin.v1.BeginLoginRequest\x1a&.rackbill.plugin.v1.BeginLoginResponse\x12d\n" +
-	"\rCompleteLogin\x12(.rackbill.plugin.v1.CompleteLoginRequest\x1a).rackbill.plugin.v1.CompleteLoginResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\rCompleteLogin\x12(.rackbill.plugin.v1.CompleteLoginRequest\x1a).rackbill.plugin.v1.CompleteLoginResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_login_proto_rawDescOnce sync.Once

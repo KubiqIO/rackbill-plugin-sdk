@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package rackbill.plugin.v1;
 
-option go_package = "kubiq.io/rackbill/sdk/plugin/proto;proto";
+option go_package = "rackbill.com/sdk/plugin/proto;proto";
 
 // Bundle is the manifest a plugin binary serves alongside its kind services
 // when it serves more than one kind (plugin architecture §3, decision 118):

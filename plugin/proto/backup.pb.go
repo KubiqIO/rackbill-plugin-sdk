@@ -1317,7 +1317,7 @@ const file_plugin_proto_backup_proto_rawDesc = "" +
 	"\bSetQuota\x12#.rackbill.plugin.v1.SetQuotaRequest\x1a(.rackbill.plugin.v1.BackupActionResponse\x12h\n" +
 	"\x0eCreateSnapshot\x12).rackbill.plugin.v1.CreateSnapshotRequest\x1a+.rackbill.plugin.v1.BackupOperationResponse\x12j\n" +
 	"\x0fRestoreSnapshot\x12*.rackbill.plugin.v1.RestoreSnapshotRequest\x1a+.rackbill.plugin.v1.BackupOperationResponse\x12d\n" +
-	"\fGetBackupJob\x12'.rackbill.plugin.v1.GetBackupJobRequest\x1a+.rackbill.plugin.v1.BackupOperationResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\fGetBackupJob\x12'.rackbill.plugin.v1.GetBackupJobRequest\x1a+.rackbill.plugin.v1.BackupOperationResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_backup_proto_rawDescOnce sync.Once

@@ -631,7 +631,7 @@ const file_plugin_proto_notifier_proto_rawDesc = "" +
 	"\x04Send\x12\x1f.rackbill.plugin.v1.SendRequest\x1a .rackbill.plugin.v1.SendResponse\x12p\n" +
 	"\x11ListConfigOptions\x12,.rackbill.plugin.v1.ListConfigOptionsRequest\x1a-.rackbill.plugin.v1.ListConfigOptionsResponse\x12d\n" +
 	"\rGetChatMember\x12(.rackbill.plugin.v1.GetChatMemberRequest\x1a).rackbill.plugin.v1.GetChatMemberResponse\x12|\n" +
-	"\x15ModifyChatMemberRoles\x120.rackbill.plugin.v1.ModifyChatMemberRolesRequest\x1a1.rackbill.plugin.v1.ModifyChatMemberRolesResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\x15ModifyChatMemberRoles\x120.rackbill.plugin.v1.ModifyChatMemberRolesRequest\x1a1.rackbill.plugin.v1.ModifyChatMemberRolesResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_notifier_proto_rawDescOnce sync.Once

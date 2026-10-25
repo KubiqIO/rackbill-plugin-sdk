@@ -8370,7 +8370,7 @@ const file_plugin_proto_provisioner_proto_rawDesc = "" +
 	"\x0eGetGameStartup\x12%.rackbill.plugin.v1.GameServerRequest\x1a'.rackbill.plugin.v1.GameStartupResponse\x12j\n" +
 	"\x0fSetGameVariable\x12*.rackbill.plugin.v1.GameVariableSetRequest\x1a+.rackbill.plugin.v1.GameVariableSetResponse\x12Z\n" +
 	"\x12UpdateGameSettings\x12'.rackbill.plugin.v1.GameSettingsRequest\x1a\x1b.rackbill.plugin.v1.GameAck\x12e\n" +
-	"\x10ListGameActivity\x12'.rackbill.plugin.v1.GameActivityRequest\x1a(.rackbill.plugin.v1.GameActivityResponseB*Z(kubiq.io/rackbill/sdk/plugin/proto;protob\x06proto3"
+	"\x10ListGameActivity\x12'.rackbill.plugin.v1.GameActivityRequest\x1a(.rackbill.plugin.v1.GameActivityResponseB%Z#rackbill.com/sdk/plugin/proto;protob\x06proto3"
 
 var (
 	file_plugin_proto_provisioner_proto_rawDescOnce sync.Once
