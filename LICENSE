@@ -1,0 +1,178 @@
+RACKBILL PLUGIN SDK COMMERCIAL LICENSE
+Version 1.0 - October 25, 2026
+
+Copyright (c) 2026 Kubiq LLC. All rights reserved.
+
+1. PARTIES AND SCOPE
+
+This license ("License") is between Kubiq LLC ("Kubiq") and the individual
+or legal entity using the RackBill Plugin SDK ("you"). If you act for an
+entity, you represent that you have authority to bind it. By exercising the
+permissions granted below, you agree to this License. If you do not agree,
+do not use or copy the SDK. Merely viewing this License is not acceptance.
+
+"SDK" means the proprietary code, libraries, protocol definitions, generated
+bindings, examples, documentation, and related materials that Kubiq supplies
+under this License in the rackbill-plugin-sdk repository or its releases,
+including updates. Independently licensed materials are addressed in Section 6.
+
+"RackBill Client" means an individual or entity with a valid entitlement
+to use RackBill under its applicable commercial license or agreement.
+"Plugin Developer" means an individual or entity developing, testing,
+maintaining, or supporting plugins exclusively for use with RackBill.
+"Plugin" means an independently developed extension that uses RackBill's
+plugin interfaces and is intended exclusively for use with RackBill.
+
+This is a proprietary commercial license, not an open-source license.
+Public availability of the SDK does not grant rights beyond this License,
+applicable nonwaivable law, or rights separately granted by Kubiq.
+
+2. LIMITED PERMITTED USE
+
+Subject to this License, Kubiq grants RackBill Clients and Plugin Developers
+a limited, nonexclusive, nontransferable, nonsublicensable license to:
+
+(a) download, inspect, and make reasonable internal working and backup
+    copies of the SDK solely to develop, test, build, maintain, and support
+    Plugins or to operate Plugins with a valid RackBill entitlement; and
+(b) compile or link SDK components, including bindings generated from its
+    protocol definitions, into Plugins solely for those purposes.
+
+Your employees and contractors may exercise these rights on your behalf
+solely for these purposes and subject to this License. You are responsible
+for their compliance. Internal build systems and private dependency caches
+may hold copies for these permitted uses; they must not provide public access.
+
+Plugin Developers need not be RackBill Clients merely to develop Plugins.
+This License does not grant any right to install or operate RackBill itself,
+bypass its licensing, or use a Plugin with an unlicensed RackBill installation.
+RackBill use, including development and testing installations, remains subject
+to its separate applicable terms.
+
+3. DISTRIBUTION OF COMPILED PLUGINS
+
+You may distribute or sell Plugins to RackBill Clients with SDK components
+embedded in compiled object-code form only, provided that:
+
+(a) the SDK components are included only as an integral part of the Plugin
+    and only to enable that Plugin to operate with RackBill;
+(b) you do not distribute SDK source code, protocol definitions, generated
+    source bindings, examples, documentation, or a standalone SDK library,
+    development kit, or other independently usable SDK component;
+(c) you include a copy of this License and the applicable Kubiq copyright
+    notices in the Plugin's distribution materials; and
+(d) your terms do not grant recipients broader rights to the SDK components
+    than this License grants.
+
+Kubiq directly licenses RackBill Clients receiving such Plugins to execute
+the embedded SDK components solely as part of those Plugins with their
+licensed RackBill installations, subject to this License. This permission
+does not authorize extracting, repackaging, or independently using or
+redistributing those components. You do not sublicense the SDK.
+
+You retain ownership of your independently developed Plugin code and may
+choose its licensing and pricing, subject to Kubiq's rights in the SDK.
+This License does not require you to disclose your own Plugin source code.
+You may publish your own Plugin source code if it contains no SDK materials;
+recipients must obtain the SDK separately from Kubiq or an authorized source.
+
+4. PROHIBITED USE AND REDISTRIBUTION
+
+Except as expressly permitted in Sections 2 and 3, separately authorized by
+Kubiq in writing, or permitted by law that cannot be waived by contract,
+you must not:
+
+(a) reuse the SDK or any part of it in another product, service, framework,
+    SDK, or project, or use it for any purpose unrelated to RackBill Plugins;
+(b) publish, redistribute, mirror, sell, rent, lease, lend, sublicense, or
+    otherwise make the SDK or any part of it available to third parties,
+    in source or binary form, whether modified or unmodified;
+(c) modify, translate, adapt, or create derivative works of the SDK, except
+    for the compilation, linking, and binding generation expressly permitted
+    by this License;
+(d) use the SDK to create or support a replacement for RackBill, or a plugin
+    framework or compatibility layer for use outside RackBill;
+(e) remove, alter, or obscure copyright, license, or ownership notices; or
+(f) grant or purport to grant others rights in the SDK that Kubiq has not
+    authorized, including by applying another license to SDK materials.
+
+Any permissions Kubiq grants through the terms of a repository-hosting
+service, including rights to view or fork a public repository within that
+service, remain governed by those terms. Those permissions do not grant
+additional SDK use or redistribution rights outside their stated scope.
+
+5. OWNERSHIP AND RESERVED RIGHTS
+
+The SDK is licensed, not sold. Kubiq and its licensors retain all right,
+title, and interest in the SDK and its intellectual property. All rights
+not expressly granted are reserved. No license to RackBill's application
+code or other Kubiq products is granted by this License.
+
+No trademark license is granted, except to truthfully identify a Plugin's
+compatibility with RackBill. You must not imply that Kubiq endorses,
+certifies, or supports your Plugin without Kubiq's written authorization.
+
+6. INDEPENDENTLY LICENSED MATERIALS
+
+Third-party and other independently licensed materials remain subject to
+their own licenses and notices. Those terms control for their respective
+materials in the event of conflict. This License does not limit rights or
+obligations under those terms or replace required notices, attributions,
+or source offers.
+
+7. TERMINATION
+
+Your rights under this License terminate automatically if you materially
+breach it or cease to qualify as a RackBill Client or Plugin Developer.
+On termination, stop using and distributing the SDK and delete copies in
+your possession or control, including embedded copies, except copies that
+must be retained by law or in routine archival backups. Retained copies
+must remain inaccessible for operational use. Reinstatement requires
+Kubiq's written permission.
+
+Termination of your rights does not terminate the rights of other compliant
+licensees, including RackBill Clients who previously received Plugins under
+Section 3. Ownership, restrictions, independently licensed materials,
+disclaimers, liability limits, and general terms survive termination.
+
+8. WARRANTY DISCLAIMER AND LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, EXCEPT AS EXPRESSLY
+AGREED IN A SEPARATE SIGNED AGREEMENT WITH KUBIQ, THE SDK IS PROVIDED
+"AS IS," "AS AVAILABLE," AND WITH ALL FAULTS. KUBIQ AND ITS LICENSORS
+DISCLAIM ALL WARRANTIES, WHETHER EXPRESS, IMPLIED, OR STATUTORY, INCLUDING
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND
+NONINFRINGEMENT. NO SUPPORT, MAINTENANCE, UPDATES, OR CONTINUED COMPATIBILITY
+ARE PROMISED BY THIS LICENSE.
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, KUBIQ AND ITS LICENSORS
+WILL NOT BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL,
+EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR LOST PROFITS, REVENUE, DATA,
+GOODWILL, OR BUSINESS INTERRUPTION ARISING OUT OF THE SDK OR THIS LICENSE,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. THEIR TOTAL AGGREGATE
+LIABILITY WILL NOT EXCEED THE GREATER OF THE AMOUNT YOU PAID KUBIQ
+SPECIFICALLY FOR THE SDK IN THE TWELVE MONTHS BEFORE THE EVENT GIVING
+RISE TO THE CLAIM OR US $100. THESE LIMITS APPLY REGARDLESS OF THE FORM
+OF ACTION, INCLUDING CONTRACT, TORT, OR NEGLIGENCE.
+
+NOTHING IN THIS LICENSE EXCLUDES OR LIMITS LIABILITY FOR FRAUD, WILLFUL
+MISCONDUCT, GROSS NEGLIGENCE, OR LIABILITY THAT CANNOT LAWFULLY BE EXCLUDED
+OR LIMITED. NONWAIVABLE STATUTORY RIGHTS REMAIN IN EFFECT.
+
+9. GENERAL TERMS
+
+The laws of the State of Washington, USA, and applicable United States
+federal law govern this License, without regard to conflict-of-law rules.
+Subject to nonwaivable law, disputes are subject to the exclusive
+jurisdiction of state and federal courts of competent jurisdiction in
+Washington, USA. The United Nations Convention on Contracts for the
+International Sale of Goods does not apply.
+
+This License is the entire agreement concerning the SDK, except that a
+separate signed agreement with Kubiq controls to the extent of a conflict.
+It does not replace the separate terms governing RackBill or third-party
+plugins. Changes require agreement by you and Kubiq; publishing new license
+terms alone does not change the terms for SDK versions you already received.
+If any provision is unenforceable, it will be limited only as necessary,
+and the remaining provisions will remain effective. Failure to enforce
+a provision is not a waiver.
