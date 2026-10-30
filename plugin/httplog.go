@@ -33,8 +33,8 @@ import (
 // record when the response body is closed — so request and response stay
 // together in the ring. Credentials are redacted before anything is
 // written: sensitive headers, query parameters, and secret-shaped fields
-// in bodies (RedactSecrets). A console endpoint's reply is withheld whole
-// (consolePath). Checkout/vault exchanges with reusable payment references
+// in bodies (RedactSecrets). Console and panel session replies are withheld
+// whole. Checkout/vault exchanges with reusable payment references
 // withhold both bodies without capturing their contents (paymentPath).
 
 // httpLogBodyLimit is how much of each body a debug record keeps.
@@ -67,7 +67,12 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	}
 	x := &exchange{method: req.Method, url: redactURL(req.URL), reqHeader: req.Header.Clone(), start: time.Now()}
 	x.paymentBodies = paymentPath(req.URL)
-	x.reqBody.withheld, x.respBody.withheld = x.paymentBodies, x.paymentBodies
+	if consolePath(req.URL) {
+		x.withhold = "console session reply"
+	} else if panelSessionPath(req.URL) {
+		x.withhold = "panel session reply"
+	}
+	x.reqBody.withheld, x.respBody.withheld = x.paymentBodies, x.paymentBodies || x.withhold != ""
 	x.reqType = req.Header.Get("Content-Type")
 	x.reqLen = req.ContentLength
 	sent := req
@@ -88,7 +93,6 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	x.respHeader = resp.Header.Clone()
 	x.respType = resp.Header.Get("Content-Type")
 	x.respLen = resp.ContentLength
-	x.withhold = consolePath(req.URL)
 	if resp.Body == nil {
 		x.emit()
 		return resp, nil
@@ -153,8 +157,8 @@ type exchange struct {
 	respType      string
 	respLen       int64
 	respBody      capture
-	withhold      bool // a console endpoint: the reply is a session credential
-	paymentBodies bool // both bodies may contain reusable references under generic id fields
+	withhold      string // reason the response body may contain session credentials
+	paymentBodies bool   // both bodies may contain reusable references under generic id fields
 	err           error
 }
 
@@ -185,8 +189,8 @@ func (x *exchange) emit() {
 		b.WriteString("< \n")
 		if x.paymentBodies {
 			fmt.Fprintf(&b, "< <%d bytes withheld: payment provider body>\n", x.respBody.total)
-		} else if x.withhold {
-			fmt.Fprintf(&b, "< <%d bytes withheld: console session reply>\n", x.respBody.total)
+		} else if x.withhold != "" {
+			fmt.Fprintf(&b, "< <%d bytes withheld: %s>\n", x.respBody.total, x.withhold)
 		} else {
 			writeBody(&b, "< ", x.respType, x.respLen, &x.respBody)
 		}
@@ -293,6 +297,22 @@ func consolePath(u *url.URL) bool {
 	return false
 }
 
+// Panel sign-in replies use ordinary url/details/id fields for credentials.
+// Plesk multiplexes sessions and statistics through one XML endpoint, so its
+// responses are conservatively withheld regardless of the request payload.
+func panelSessionPath(u *url.URL) bool {
+	if u == nil {
+		return false
+	}
+	p := strings.TrimSuffix(strings.ToLower(u.Path), "/")
+	for _, endpoint := range []string{"/json-api/create_user_session", "/cmd_api_login_keys", "/enterprise/control/agent.php"} {
+		if strings.HasSuffix(p, endpoint) {
+			return true
+		}
+	}
+	return false
+}
+
 // Stripe and PayPal place reusable payment references in fields such as id,
 // including nested error responses. Withhold both bodies for the complete
 // checkout/intent resource family, including provider-compatible test endpoints.
@@ -330,7 +350,7 @@ func sensitiveHeader(name string) bool {
 // with it — over-redaction in a debug log costs nothing.
 // NameSilo sends its API credential as the exact query name "key". Match
 // that name without treating ordinary names such as "monkey" as secrets.
-var sensitiveParamRe = regexp.MustCompile(`(?i)(^key$|password|passwd|pass|secret|token|api[-_]?key|apikey|access[-_]?key|private[-_]?key|client[-_]?secret|signature|sig|auth|credential|ticket|payment[-_]?method|vault|customer)`)
+var sensitiveParamRe = regexp.MustCompile(`(?i)(^key$|password|passwd|pass|secret|token|api[-_]?key|apikey|access[-_]?key|private[-_]?key|client[-_]?secret|signature|sig|auth|credential|ticket|session|sessid|payment[-_]?method|vault|customer)`)
 
 // redactURL masks userinfo and secret-shaped query values.
 func redactURL(u *url.URL) string {
@@ -369,6 +389,10 @@ var secretPatterns = []struct {
 }{
 	// PEM private keys, whole.
 	{regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----`), "[redacted private key]"},
+	// Plesk's XML session envelope puts the credential in an ordinary id
+	// element. Cover truncated excerpts too: an unfinished envelope remains
+	// sensitive through the end of the captured text.
+	{regexp.MustCompile(`(?is)(<create_session\b[^>]*>).*?(</create_session\s*>|$)`), "$1[redacted panel session]$2"},
 	// JSON: "password": "…" and friends (the key keeps its name). Only
 	// string values match, so "vnc_enabled": true stays readable while a
 	// console ticket ("vnc_url" on SolusVM 2 servers, Proxmox's "ticket")
@@ -378,7 +402,7 @@ var secretPatterns = []struct {
 	{regexp.MustCompile(`(?i)<([\w:.-]*(?:password|passwd|pass|secret|token|apikey|api_key|private_key|credential|payment[-_]?method|vault|customer)[\w:.-]*)>[^<]*</`), "<$1>[redacted]</"},
 	// Form, query and env style: password=… (word chars around the key so
 	// "monkey=" stays, "api_key=", "x-api-key=" and "adminapipass=" go).
-	{regexp.MustCompile(`(?i)\b(key|[\w.-]*(?:password|passwd|pass|secret|token|api[-_]?key|apikey|private[-_]?key|client[-_]?secret|access[-_]?key|signature|credential|ticket|payment[-_]?method|vault|customer)[\w.-]*)=([^&\s"'<>]+)`), "$1=[redacted]"},
+	{regexp.MustCompile(`(?i)\b(key|[\w.-]*(?:password|passwd|pass|secret|token|api[-_]?key|apikey|private[-_]?key|client[-_]?secret|access[-_]?key|signature|credential|ticket|session|sessid|payment[-_]?method|vault|customer)[\w.-]*)=([^&\s"'<>]+)`), "$1=[redacted]"},
 	// Header lines and "Authorization: Bearer …" echoed in bodies.
 	{regexp.MustCompile(`(?im)^([ \t]*(?:authorization|proxy-authorization|cookie|set-cookie|x-api-key|x-auth-token|x-access-token|x-amz-security-token)[ \t]*:)[ \t]*.*$`), "$1 [redacted]"},
 	{regexp.MustCompile(`(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}`), "$1 [redacted]"},
@@ -391,13 +415,50 @@ var secretPatterns = []struct {
 	{regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`), "[redacted]"},
 }
 
+// Historical panel replies can carry complete URLs in url/details/result
+// fields. DirectAdmin form-encodes the whole URL, hiding even password= from
+// ordinary field redaction. Remove these login URLs as units, keeping the
+// surrounding response shape and leaving ordinary provider URLs readable.
+var panelURLPattern = regexp.MustCompile(`(?i)https?://[^\s"'<>\\]+|https?%3a%2f%2f[^&\s"'<>\\]+`)
+
+func redactPanelURLs(s string) string {
+	return panelURLPattern.ReplaceAllStringFunc(s, func(raw string) string {
+		candidate := raw
+		if !strings.Contains(raw, "://") {
+			// Inspect only the address and path. An 8 KiB log excerpt can
+			// truncate a percent escape inside the credential's query; that
+			// must not make a recognizable login URL survive redaction.
+			if query := strings.Index(strings.ToLower(candidate), "%3f"); query >= 0 {
+				candidate = candidate[:query]
+			}
+			var err error
+			candidate, err = url.QueryUnescape(candidate)
+			if err != nil {
+				return raw
+			}
+		}
+		candidate, _, _ = strings.Cut(candidate, "?")
+		u, err := url.Parse(candidate)
+		if err != nil {
+			return raw
+		}
+		p := strings.TrimSuffix(strings.ToLower(u.Path), "/")
+		if strings.Contains(p, "/cpsess") || strings.HasSuffix(p, "/cmd_login") || strings.HasSuffix(p, "/enterprise/rsession_init.php") {
+			return "[redacted panel login URL]"
+		}
+		return raw
+	})
+}
+
 // RedactSecrets masks credential-shaped text: JSON, XML and form fields
 // whose names say password, secret, token, key, or signature (and, in JSON,
 // form and query text, vnc or ticket: console credentials); bearer and
 // basic authorization values; PEM private keys; and well-known API key
 // formats. Provider payment-method, vault and customer references are also
 // sensitive. Names are kept so the shape of a payload stays readable.
+// Panel login URLs and Plesk session envelopes are removed as whole values.
 func RedactSecrets(s string) string {
+	s = redactPanelURLs(s)
 	for _, p := range secretPatterns {
 		s = p.re.ReplaceAllString(s, p.repl)
 	}

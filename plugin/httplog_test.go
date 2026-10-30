@@ -102,6 +102,76 @@ func TestLoggingTransportRedactsBareAPIKey(t *testing.T) {
 	}
 }
 
+func TestLoggingTransportWithholdsPanelSessionReplies(t *testing.T) {
+	for _, tc := range []struct {
+		name, path, contentType, body, secret string
+	}{
+		{"cpanel", "/json-api/create_user_session", "application/json", `{"metadata":{"result":1},"data":{"url":"https://panel.example:2083/cpsess12345/login/?session=syntheticCpanelSession"}}`, "syntheticCpanelSession"},
+		{"directadmin", "/CMD_API_LOGIN_KEYS", "application/x-www-form-urlencoded", `error=0&details=https%3A%2F%2Fpanel.example%3A2222%2FCMD_LOGIN%3Fusername%3Dbuyer%26password%3DsyntheticDASession`, "syntheticDASession"},
+		{"plesk", "/enterprise/control/agent.php", "text/xml", `<packet><server><create_session><result><status>ok</status><id>syntheticPleskSession</id></result></create_session></server></packet>`, "syntheticPleskSession"},
+		{"plesk-proxy", "/panel/enterprise/control/agent.php", "text/xml", `<packet><server><create_session><result><id>syntheticPleskSession</id></result></create_session></server></packet>`, "syntheticPleskSession"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", tc.contentType)
+				io.WriteString(w, tc.body)
+			}))
+			defer srv.Close()
+			buf := captureLog(t, LogDebug)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+tc.path, strings.NewReader(`{}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := LoggingTransport(nil).RoundTrip(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil || string(raw) != tc.body {
+				t.Fatalf("caller lost the session response: %q %v", raw, err)
+			}
+			if tap := resp.Body.(*tapReader); tap.cap.buf.Len() != 0 {
+				t.Fatal("session response was retained in the diagnostic buffer")
+			}
+			if strings.Contains(buf.String(), tc.secret) {
+				t.Fatal("debug log exposed the session credential")
+			}
+			_, msg, attrs := parseHclogLine(t, strings.TrimSpace(buf.String()))
+			if !strings.Contains(msg, "withheld: panel session reply") || attrs["status"] != float64(200) || attrs["response_bytes"] != float64(len(tc.body)) {
+				t.Fatalf("exchange metadata missing: %s %#v", msg, attrs)
+			}
+		})
+	}
+}
+
+func TestRedactHistoricalPanelSessions(t *testing.T) {
+	for _, input := range []string{
+		`{"url":"https://panel.example:2083/cpsess12345/login/?session=syntheticSessionCredential"}`,
+		`details=https%3A%2F%2Fpanel.example%3A2222%2FCMD_LOGIN%3Fusername%3Dbuyer%26password%3DsyntheticSessionCredential&error=0`,
+		`result=https%3A%2F%2Fpanel.example%3A2222%2FCMD_LOGIN%3Fkey%3DsyntheticSessionCredential&error=0`,
+		`details=https%3A%2F%2Fpanel.example%3A2222%2FCMD_LOGIN%3Fkey%3DsyntheticSessionCredential%`,
+		`https://panel.example/proxy/CMD_LOGIN?password=syntheticSessionCredential%`,
+		`https://panel.example:8443/enterprise/rsession_init.php?PLESKSESSID=syntheticSessionCredential`,
+		`<packet><server><create_session><result><status>ok</status><id>syntheticSessionCredential</id></result></create_session></server></packet>`,
+		"< <create_session>\n< <result><id>syntheticSessionCredential</id></result>\n< </create_session>",
+		`<create_session><result><id>syntheticSessionCredential`,
+	} {
+		out := RedactSecrets(input)
+		if strings.Contains(out, "syntheticSessionCredential") || !strings.Contains(out, "[redacted") {
+			t.Errorf("session survived redaction: %s", out)
+		}
+		if strings.HasSuffix(input, "&error=0") && !strings.HasSuffix(out, "&error=0") {
+			t.Errorf("redaction removed unrelated result: %s", out)
+		}
+	}
+	const ordinary = `{"url":"https://panel.example:8443/dashboard?id=123"} details=https%3A%2F%2Fpanel.example%2Fhelp&error=0`
+	if got := RedactSecrets(ordinary); got != ordinary {
+		t.Fatalf("ordinary URLs changed: %s", got)
+	}
+}
+
 // A console endpoint's reply is a session credential whose field names give
 // nothing away (SolusVM 2's vnc_up answers {"url": "<ticket>"}), so it is
 // withheld whole; the caller still reads it untouched.
