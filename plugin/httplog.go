@@ -328,7 +328,9 @@ func sensitiveHeader(name string) bool {
 // query string and rootpass in VM creation bodies, and the word is too short
 // to be safe to leave out. A parameter named bypass or passport is redacted
 // with it — over-redaction in a debug log costs nothing.
-var sensitiveParamRe = regexp.MustCompile(`(?i)(password|passwd|pass|secret|token|api[-_]?key|apikey|access[-_]?key|private[-_]?key|client[-_]?secret|signature|sig|auth|credential|ticket|payment[-_]?method|vault|customer)`)
+// NameSilo sends its API credential as the exact query name "key". Match
+// that name without treating ordinary names such as "monkey" as secrets.
+var sensitiveParamRe = regexp.MustCompile(`(?i)(^key$|password|passwd|pass|secret|token|api[-_]?key|apikey|access[-_]?key|private[-_]?key|client[-_]?secret|signature|sig|auth|credential|ticket|payment[-_]?method|vault|customer)`)
 
 // redactURL masks userinfo and secret-shaped query values.
 func redactURL(u *url.URL) string {
@@ -376,7 +378,7 @@ var secretPatterns = []struct {
 	{regexp.MustCompile(`(?i)<([\w:.-]*(?:password|passwd|pass|secret|token|apikey|api_key|private_key|credential|payment[-_]?method|vault|customer)[\w:.-]*)>[^<]*</`), "<$1>[redacted]</"},
 	// Form, query and env style: password=… (word chars around the key so
 	// "monkey=" stays, "api_key=", "x-api-key=" and "adminapipass=" go).
-	{regexp.MustCompile(`(?i)\b([\w.-]*(?:password|passwd|pass|secret|token|api[-_]?key|apikey|private[-_]?key|client[-_]?secret|access[-_]?key|signature|credential|ticket|payment[-_]?method|vault|customer)[\w.-]*)=([^&\s"'<>]+)`), "$1=[redacted]"},
+	{regexp.MustCompile(`(?i)\b(key|[\w.-]*(?:password|passwd|pass|secret|token|api[-_]?key|apikey|private[-_]?key|client[-_]?secret|access[-_]?key|signature|credential|ticket|payment[-_]?method|vault|customer)[\w.-]*)=([^&\s"'<>]+)`), "$1=[redacted]"},
 	// Header lines and "Authorization: Bearer …" echoed in bodies.
 	{regexp.MustCompile(`(?im)^([ \t]*(?:authorization|proxy-authorization|cookie|set-cookie|x-api-key|x-auth-token|x-access-token|x-amz-security-token)[ \t]*:)[ \t]*.*$`), "$1 [redacted]"},
 	{regexp.MustCompile(`(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}`), "$1 [redacted]"},

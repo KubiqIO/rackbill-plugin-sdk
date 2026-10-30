@@ -75,6 +75,33 @@ func TestLoggingTransportRecordsExchangeAtDebug(t *testing.T) {
 	}
 }
 
+func TestLoggingTransportRedactsBareAPIKey(t *testing.T) {
+	const credential = "syntheticNameSiloCredential"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("key") != credential {
+			t.Error("redaction changed the request credential")
+		}
+		io.WriteString(w, "ok")
+	}))
+	defer srv.Close()
+	buf := captureLog(t, LogDebug)
+	resp, err := HTTPClient(5 * time.Second).Get(srv.URL + "/api/getDomainInfo?key=" + credential + "&monkey=banana")
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	_, msg, fields := parseHclogLine(t, strings.TrimSpace(buf.String()))
+	if strings.Contains(buf.String(), credential) {
+		t.Fatal("API key appeared in a debug record")
+	}
+	for _, loggedURL := range []string{msg, fields["url"].(string)} {
+		if !strings.Contains(loggedURL, "key=%5Bredacted%5D") || !strings.Contains(loggedURL, "monkey=banana") {
+			t.Fatalf("unexpected redacted URL: %s", loggedURL)
+		}
+	}
+}
+
 // A console endpoint's reply is a session credential whose field names give
 // nothing away (SolusVM 2's vnc_up answers {"url": "<ticket>"}), so it is
 // withheld whole; the caller still reads it untouched.
@@ -256,10 +283,12 @@ func TestLoggingTransportErrors(t *testing.T) {
 
 func TestRedactSecrets(t *testing.T) {
 	cases := map[string]string{
-		`{"password":"hunter2","user":"bob"}`:                  `{"password":"[redacted]","user":"bob"}`,
-		`{"api_key": "abc", "Authorization":"Bearer x"}`:       `{"api_key":"[redacted]", "Authorization":"[redacted]"}`,
-		`<login><password>pw</password><name>n</name></login>`: `<login><password>[redacted]</password><name>n</name></login>`,
-		`token=abc&monkey=banana&client_secret=zzz`:            `token=[redacted]&monkey=banana&client_secret=[redacted]`,
+		`{"password":"hunter2","user":"bob"}`:                                           `{"password":"[redacted]","user":"bob"}`,
+		`{"api_key": "abc", "Authorization":"Bearer x"}`:                                `{"api_key":"[redacted]", "Authorization":"[redacted]"}`,
+		`<login><password>pw</password><name>n</name></login>`:                          `<login><password>[redacted]</password><name>n</name></login>`,
+		`token=abc&monkey=banana&client_secret=zzz`:                                     `token=[redacted]&monkey=banana&client_secret=[redacted]`,
+		`https://www.namesilo.com/api/getDomainInfo?key=credential&domain=example.test`: `https://www.namesilo.com/api/getDomainInfo?key=[redacted]&domain=example.test`,
+		`KEY=credential&monkey=banana`:                                                  `KEY=[redacted]&monkey=banana`,
 		// Virtualizor's bare "pass": the admin API key in every query string
 		// and the root password in VM creation bodies.
 		`act=vs&adminapipass=s3cret&api=json`:                                  `act=vs&adminapipass=[redacted]&api=json`,
