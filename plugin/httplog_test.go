@@ -351,14 +351,36 @@ func TestLoggingTransportErrors(t *testing.T) {
 	}
 }
 
+func TestLoggingTransportRedactsEnomCredential(t *testing.T) {
+	const token = "private-enom-credential"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("pw") != token {
+			t.Error("redaction changed the credential sent to the provider")
+		}
+		io.WriteString(w, "ok")
+	}))
+	defer srv.Close()
+	buf := captureLog(t, LogDebug)
+	resp, err := HTTPClient(time.Second).Get(srv.URL + "/interface.asp?pw=" + token + "&command=check&pw_hint=readable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if logged := buf.String(); strings.Contains(logged, token) || !strings.Contains(logged, "pw=%5Bredacted%5D") || !strings.Contains(logged, "pw_hint=readable") {
+		t.Fatalf("unexpected redacted HTTP log: %s", logged)
+	}
+}
+
 func TestRedactSecrets(t *testing.T) {
 	cases := map[string]string{
-		`{"password":"hunter2","user":"bob"}`:                                           `{"password":"[redacted]","user":"bob"}`,
-		`{"api_key": "abc", "Authorization":"Bearer x"}`:                                `{"api_key":"[redacted]", "Authorization":"[redacted]"}`,
-		`<login><password>pw</password><name>n</name></login>`:                          `<login><password>[redacted]</password><name>n</name></login>`,
-		`token=abc&monkey=banana&client_secret=zzz`:                                     `token=[redacted]&monkey=banana&client_secret=[redacted]`,
-		`https://www.namesilo.com/api/getDomainInfo?key=credential&domain=example.test`: `https://www.namesilo.com/api/getDomainInfo?key=[redacted]&domain=example.test`,
-		`KEY=credential&monkey=banana`:                                                  `KEY=[redacted]&monkey=banana`,
+		`{"password":"hunter2","user":"bob"}`:                                                  `{"password":"[redacted]","user":"bob"}`,
+		`{"api_key": "abc", "Authorization":"Bearer x"}`:                                       `{"api_key":"[redacted]", "Authorization":"[redacted]"}`,
+		`<login><password>pw</password><name>n</name></login>`:                                 `<login><password>[redacted]</password><name>n</name></login>`,
+		`token=abc&monkey=banana&client_secret=zzz`:                                            `token=[redacted]&monkey=banana&client_secret=[redacted]`,
+		`https://www.namesilo.com/api/getDomainInfo?key=credential&domain=example.test`:        `https://www.namesilo.com/api/getDomainInfo?key=[redacted]&domain=example.test`,
+		`KEY=credential&monkey=banana`:                                                         `KEY=[redacted]&monkey=banana`,
+		`Get "https://reseller.enom.com/interface.asp?pw=private%2Bkey&uid=reseller": timeout`: `Get "https://reseller.enom.com/interface.asp?pw=[redacted]&uid=reseller": timeout`,
+		`PW=private&pw_hint=keep&monkey=banana`:                                                `PW=[redacted]&pw_hint=keep&monkey=banana`,
 		// Virtualizor's bare "pass": the admin API key in every query string
 		// and the root password in VM creation bodies.
 		`act=vs&adminapipass=s3cret&api=json`:                                  `act=vs&adminapipass=[redacted]&api=json`,
