@@ -1,5 +1,0 @@
-# Python 3.11+. grpcio-tools supplies protoc at build time only.
-grpcio-tools==1.85.1
-grpclib==0.4.9
-protobuf==7.36.2
-cryptography==49.0.0

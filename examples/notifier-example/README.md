@@ -91,11 +91,15 @@ directory in an SDK checkout:
 
 ```sh
 python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install --upgrade grpcio-tools grpclib protobuf cryptography
 .venv/bin/python build.py
 ./dist/notifier-python-example -rb-plugin-info
 .venv/bin/python -B -m unittest discover -s . -p 'test_*.py'
 ```
+
+Package versions are intentionally unpinned for this source example. Install
+them only when running it; no Python dependency manifest or lockfile is
+maintained for the sample.
 
 No Go compiler or separately installed `protoc` is needed. `build.py` generates
 Python messages and service bindings into `_generated/` from the SDK's existing
@@ -115,7 +119,6 @@ do not manually lower the generated contract number.
 | `main.py` | Plugin identity, config form, `DescribeNotifier`, `Send`, optional RPC refusals and `-rb-plugin-info` |
 | `runtime.py` | go-plugin handshake, mutual TLS, health probe, shutdown and JSON logging |
 | `build.py` | Protobuf generation, contract stamp and executable launcher |
-| `requirements.txt` | Pinned Python build/runtime dependencies |
 | `test_startup.py` | Startup refusal and logging checks |
 | `interop_test.go` | Optional Go host test of the Python subprocess; excluded from normal Go builds |
 
@@ -182,12 +185,12 @@ standalone executable require additional implementation.
 
 ### Start your own Python plugin
 
-Copy `main.py`, `runtime.py`, `build.py`, `requirements.txt` and `.gitignore` into
-your own project. Keep a pinned SDK checkout available at build time, then run:
+Copy `main.py`, `runtime.py`, `build.py` and `.gitignore` into your own project.
+Keep a pinned SDK checkout available at build time, then run:
 
 ```sh
 python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install --upgrade grpcio-tools grpclib protobuf cryptography
 .venv/bin/python build.py --sdk-root /absolute/path/to/rackbill-plugin-sdk
 ```
 
