@@ -21,7 +21,7 @@ package plugin
 // surface fingerprint in contract_test.go, which is what makes the question
 // unmissable: that test fails on any change to the surface until one or the
 // other is done deliberately.
-const ContractVersion = 15
+const ContractVersion = 16
 
 // Contract is one row of the contract history.
 type Contract struct {
@@ -78,6 +78,7 @@ var Contracts = []Contract{
 	// product-scoped accounting field on the connection form and require it,
 	// and never ask for its options. Same planned release as contract 14.
 	{Version: 15, Agent: "0.2.21", Note: "accounting product-scoped config fields with ListConfigOptions, per-line product mapping on SyncInvoice, and refund allocation lines on SyncRefund (decisions 149-151)"},
+	{Version: 16, Agent: "0.2.31", Note: "portal content providers: static locale packs applied to tenant content drafts, available standalone or in bundles"},
 }
 
 // AgentForContract returns the first agent release that speaks the

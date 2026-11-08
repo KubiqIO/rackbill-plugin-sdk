@@ -36,7 +36,7 @@ const BundlePluginName = "bundle"
 var Kinds = []string{
 	GatewayPluginName, ProvisionerPluginName, UsageSourcePluginName, NotifierPluginName,
 	RegistrarPluginName, FraudPluginName, DNSPluginName, BackupPluginName,
-	AccountingPluginName, LoginPluginName, OOBPluginName, IPAMPluginName,
+	AccountingPluginName, LoginPluginName, OOBPluginName, IPAMPluginName, ContentPluginName,
 }
 
 // KnownKind reports whether kind is one of Kinds.
@@ -54,19 +54,20 @@ func KnownKind(kind string) bool {
 type Bundle struct {
 	// Storage is shared by every kind in this process. When nil, the primary
 	// kind's implementation is checked for StorageProvider.
-	Storage        StorageProvider
-	Gateway        PaymentGateway
-	Provisioner    Provisioner
-	UsageSource    UsageSource
-	Notifier       Notifier
-	Registrar      Registrar
-	FraudScreen    FraudScreen
-	DNSProvider    DNSProvider
-	BackupProvider BackupProvider
-	Accounting     AccountingProvider
-	LoginProvider  LoginProvider
-	OOBProvider    OOBProvider
-	IPAMProvider   IPAMProvider
+	Storage         StorageProvider
+	Gateway         PaymentGateway
+	Provisioner     Provisioner
+	UsageSource     UsageSource
+	Notifier        Notifier
+	Registrar       Registrar
+	FraudScreen     FraudScreen
+	DNSProvider     DNSProvider
+	BackupProvider  BackupProvider
+	Accounting      AccountingProvider
+	LoginProvider   LoginProvider
+	OOBProvider     OOBProvider
+	IPAMProvider    IPAMProvider
+	ContentProvider ContentProvider
 }
 
 // ServedKind is one kind a binary serves, as -rb-plugin-info reports it: the
@@ -171,6 +172,12 @@ func (b Bundle) served() []served {
 		add(IPAMPluginName, impl, &IPAMPlugin{Impl: impl}, func(ctx context.Context) (ServedKind, error) {
 			i, err := impl.Describe(ctx)
 			return identity(IPAMPluginName, i.Name, i.DisplayName, i.Version, i.Maturity), err
+		})
+	}
+	if impl := b.ContentProvider; impl != nil {
+		add(ContentPluginName, impl, &ContentPlugin{Impl: impl}, func(ctx context.Context) (ServedKind, error) {
+			i, err := impl.Describe(ctx)
+			return identity(ContentPluginName, i.Name, i.DisplayName, i.Version, i.Maturity), err
 		})
 	}
 	return out

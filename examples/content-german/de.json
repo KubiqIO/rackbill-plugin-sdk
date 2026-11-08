@@ -1,0 +1,8 @@
+{
+  "billing.pay.submit": "{amount} bezahlen",
+  "billing.quote_list.count": "{count, plural, one {# Angebot} other {# Angebote}}",
+  "login.description": "Zugang zu Ihrem Kundenportal",
+  "login.email": "E-Mail",
+  "login.password": "Passwort",
+  "login.title": "Anmelden"
+}

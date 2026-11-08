@@ -3,7 +3,8 @@
 `rackbill.com/sdk` is the standalone Go module for writing RackBill
 plugins: payment gateways, provisioners, registrars, DNS providers, usage
 sources, fraud screens, notifiers, backup repositories, accounting exports,
-login providers, out-of-band consoles, and upstream IPAM providers. It contains no agent code — just the public interfaces,
+login providers, out-of-band consoles, upstream IPAM providers, and portal content
+packs. It contains no agent code — just the public interfaces,
 the proto contract, and the `Serve*` entry points.
 
 ```go
@@ -23,7 +24,7 @@ directly from the proto files in [`plugin/proto/`](plugin/proto/) (package
 
 ## Example plugins
 
-The SDK includes two buildable scaffolds:
+The SDK includes buildable examples:
 
 - [Notifier](examples/notifier-example/): equivalent Go and Python examples showing
   plugin identity, configuration, request handling and logging. Go uses
@@ -32,6 +33,9 @@ The SDK includes two buildable scaffolds:
 - [Provisioner](examples/provisioner-example/): commented stubs for the required
   lifecycle and optional VM, backup, capacity, panel and game-server methods.
   Capability flags stay disabled until you implement the corresponding methods.
+- [German content pack](examples/content-german/): an embedded JSON translation
+  map served through `sdk.ServeContentProvider`, with instructions for exporting
+  the full portal catalog and completing every available string.
 
 Each example's README explains how to build it, inspect its metadata and adapt it
 for your own plugin. Provider operations are left for your implementation.
@@ -67,6 +71,44 @@ with a newer SDK does not lower the plugin's contract requirement.
 
 See [Contract version](#contract-version) below and the
 [wire protocol guide](https://rackbill.com/docs/plugins/wire-protocol/).
+
+## Portal content packs
+
+Contract 16 adds the `content` kind for translations and alternative wording of
+the portal's catalog strings. Implement `ContentProvider.Describe` and serve it
+with `ServeContentProvider` (or `Bundle.ContentProvider`):
+
+```go
+func (germanContent) Describe(context.Context) (sdk.ContentInfo, error) {
+    return sdk.ContentInfo{
+        Name: "german", DisplayName: "German portal content", Version: "1.0.0",
+        Maturity: sdk.MaturityAlpha,
+        Packs: []sdk.ContentPack{{
+            ID: "german", DisplayName: "German", Locale: "de",
+            Values: map[string]string{"login.title": "Anmelden"},
+        }},
+    }, nil
+}
+```
+
+Build as `content-<name>`. The host validates and snapshots all packs at load;
+portal rendering does not call the plugin. Content editors apply a chosen pack
+to their company's shared draft, preserving existing wording by default, and
+publish through the usual review. Supported languages may be prepared while
+disabled; applying a pack does not change the enabled-language settings. Updating or
+uninstalling the binary does not rewrite previously applied text. A pack may
+cover every active catalog key or
+only some; the panel reports coverage against the running agent's catalog,
+excluding keys marked deprecated or superseded.
+
+`GET /api/admin/portal-copy/catalog` exports all keys, English defaults,
+parameters, validation metadata and supported locales to an authorized content
+editor. First-party dashboard strings belong to this same catalog and need no
+extra plugin format. Packs use these exact keys and locales, and cannot declare
+new portal strings, tenant-specific composition keys or locales. Required parameters,
+message grammar and restricted rich-text rules apply to translations as they
+do to manually edited copy. The [German example guide](examples/content-german/)
+covers catalog export, complete translation authoring and installation.
 
 ## Persistent plugin storage
 

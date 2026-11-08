@@ -27,9 +27,9 @@ import (
 // older agent could still run and present a plugin using the change — re-pin
 // the fingerprint if so, bump ContractVersion (and add a Contracts row)
 // first if not. The failure message prints the new value.
-// Fractional accounting tax fields are additive: updated plugins accept old
-// hosts' integer rates; clients gate fractional exports on the SDK capability.
-const pinnedContractSurface = "111927df668a2a252bc2c6c9d17805eefd32bfc50dcbc1a5921ef9f8568997de"
+// Content providers require a host that recognizes the content kind and
+// offers its static packs through the portal content draft workflow.
+const pinnedContractSurface = "a0714dedbce90547081c27afc6347939eeff5565993a8d66ce3588b9fe5b453c"
 
 const protoPackage = "rackbill.plugin.v1"
 

@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package rackbill.plugin.v1;
+
+option go_package = "rackbill.com/sdk/plugin/proto;proto";
+
+// ContentProvider distributes static portal translations. The host snapshots
+// and validates the complete offering when loading the plugin; applying a pack
+// copies its values into a tenant's content draft for preview and publication.
+// No plugin RPC runs while serving a portal page.
+service ContentProvider {
+  rpc DescribeContentProvider(DescribeContentProviderRequest) returns (DescribeContentProviderResponse);
+}
+
+message DescribeContentProviderRequest {}
+
+message DescribeContentProviderResponse {
+  string name = 1;
+  string display_name = 2;
+  string version = 3;
+  string maturity = 4;
+  repeated ContentPack packs = 5;
+}
+
+message ContentPack {
+  string id = 1;                  // stable pack id within this provider
+  string display_name = 2;
+  string locale = 3;              // a locale supported by the host
+  map<string, string> values = 4; // catalog key -> ICU-subset translation
+}
